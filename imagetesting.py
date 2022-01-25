@@ -5,7 +5,7 @@ import numpy as np
 import math
 from numpy import array as array
 py.init()
-screen_width,screen_height = 500,700
+screen_width,screen_height = 1500,700
 
 FOV = 90
 
@@ -44,7 +44,7 @@ class Display:
         self.clock = py.time.Clock()
         self.done = False
         self.dt = 0.1 
-        r = 256 
+        r = 64 
         self.rad =  r
         self.dot_surface = py.Surface((r,r)) 
         self.dot_surface1 = py.Surface((r,r))
@@ -60,6 +60,7 @@ class Display:
         self.lasttime = time.time() 
         self.planets = np.array([])
         self.planets_vel= np.array([])
+        self.planets_mass = np.array([])
         self.filterstore = None
         self.fps_count = 0
         self.fps = 0
@@ -86,24 +87,35 @@ class Display:
 
             if event.type == py.MOUSEBUTTONDOWN:
                 x,y = py.mouse.get_pos()
+                ang = np.radians(rd.randint(0,360))
+                u,v = np.cos(ang),np.sin(ang) 
+                dis = rd.randint(0,30) 
+                x += u*dis
+                y += v*dis
+
                 x-=self.rad//2
                 y-=self.rad//2
-                dy = rd.randint(0,100)
+                dy = rd.randint(-10,10)
                 z = 0
                 x,y,z = x*1.0,(y)*1.0,(z+dy)*1.0
 
                 pos = [x,y,z]
-#                vel = [rd.randint(-1,1)*0.1,rd.randint(-1,1)*0.1,rd.randint(-1,1)*0.1]
-                vel = [0.0,0.0,0.0]
+                vel = [rd.randint(-2,2)*0.1,rd.randint(-2,2)*0.1,rd.randint(-1,1)*0.1]
+                mass = rd.randint(1,10000)
 
                 self.planets = self.planets.tolist()
                 self.planets_vel= self.planets_vel.tolist()
+                self.planets_mass = self.planets_mass.tolist()
+
                 self.planets.append(pos)
                 self.planets_vel.append(vel)
+                self.planets_mass.append(mass)
+
                 print(len(self.planets))
 
                 self.planets = np.array(self.planets) 
                 self.planets_vel = np.array(self.planets_vel) 
+                self.planets_mass= np.array(self.planets_mass) 
     
     
     def update(self):
@@ -173,9 +185,8 @@ class Display:
     def run(self):
         while not self.done:
             self.eventhandler()
-            if self.index%2 == 1:
-                self.draw()
-                py.display.update()
+            self.draw()
+            py.display.update()
             if not self.pause:
                 self.update()
             nowtime = time.time()
