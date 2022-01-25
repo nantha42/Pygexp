@@ -2,9 +2,40 @@ import pygame as py
 import time 
 import random as rd
 import numpy as np
+import math
 from numpy import array as array
 py.init()
-screen_width,screen_height = 600,700
+screen_width,screen_height = 500,700
+
+FOV = 90
+
+def camera_view(vector, points):
+    """
+        the vector pointing direction is the camera angle and the point ends is 
+        where the camera capture screen and from that place frustrum starts. Its 
+        a triangular ratio. 
+    """
+    pass
+
+def count_elements(x):
+    ans = 1
+    for i in range(len(x.shape)):
+       ans *= x.shape[i] 
+    return ans 
+
+def ptrin(x):
+    print(x)
+    time.sleep(1)
+
+def project_polygon(polygon):
+    projected_points = []
+    for point in polygon:
+        x_angle = math.atan2(point[0], point[2])
+        y_angle = math.atan2(point[1], point[2])
+        x = x_angle / math.radians(FOV) * screen_width + screen_height // 2
+        y = y_angle / math.radians(FOV) * screen_width + screen_width // 2
+        projected_points.append([x, y])
+    return projected_points
 
 class Display:
     def __init__(self):
@@ -12,14 +43,30 @@ class Display:
         py.display.set_caption("Experimenting")
         self.clock = py.time.Clock()
         self.done = False
-        self.planets = []
-        self.dt = 1 
-        self.dot_surface = py.Surface((2,2)) 
-        py.draw.circle(self.dot_surface,(255,255,255),(1,1),1,1)
-        print(py.font.get_fonts())
+        self.dt = 0.1 
+        r = 256 
+        self.rad =  r
+        self.dot_surface = py.Surface((r,r)) 
+        self.dot_surface1 = py.Surface((r,r))
+        py.draw.circle(self.dot_surface,(1,1,1),(r//2,r//2),r//2,r//2)
+        py.draw.circle(self.dot_surface,(255,215,0),(r//2,r//2),1,1)
+        
+        py.draw.circle(self.dot_surface1,(1,1,1),(r//2,r//2),r//2,r//2)
+        py.draw.circle(self.dot_surface1,(225,220,225),(r//2,r//2),1,1)
         self.bg = py.Surface((screen_width,screen_height))
         self.bg.fill((30,0,40))
-        
+        self.bg.fill((0,0,0))
+        self.font = py.font.Font("freesansbold.ttf",15)
+        self.lasttime = time.time() 
+        self.planets = np.array([])
+        self.planets_vel= np.array([])
+        self.filterstore = None
+        self.fps_count = 0
+        self.fps = 0
+        self.fps_sum = 0
+        self.pause = False
+        self.index = 0
+
         pass
             
     def eventhandler(self):
@@ -29,21 +76,64 @@ class Display:
 
             if event.type == py.KEYDOWN:
                 if event.key == py.K_a:
+                    self.pause = True
                     pass
 
             if event.type == py.KEYUP:
                 if event.key == py.K_a:
+                    self.pause = False
                     pass
 
             if event.type == py.MOUSEBUTTONDOWN:
                 x,y = py.mouse.get_pos()
-                z = rd.randint(-20,20)
-                pos = np.array([x,y,z],dtype=np.float32)
-                vel = np.array([rd.randint(-1,1)*0.1,rd.randint(-1,1)*0.1,rd.randint(-1,1)*0.1] )
-                self.planets.append([pos,vel,len(self.planets)])
+                x-=self.rad//2
+                y-=self.rad//2
+                dy = rd.randint(0,100)
+                z = 0
+                x,y,z = x*1.0,(y)*1.0,(z+dy)*1.0
+
+                pos = [x,y,z]
+#                vel = [rd.randint(-1,1)*0.1,rd.randint(-1,1)*0.1,rd.randint(-1,1)*0.1]
+                vel = [0.0,0.0,0.0]
+
+                self.planets = self.planets.tolist()
+                self.planets_vel= self.planets_vel.tolist()
+                self.planets.append(pos)
+                self.planets_vel.append(vel)
                 print(len(self.planets))
+
+                self.planets = np.array(self.planets) 
+                self.planets_vel = np.array(self.planets_vel) 
+    
     
     def update(self):
+        dt = self.dt
+        G = 0.010
+        r = -self.planets.reshape([-1,1,3]) + self.planets.reshape([1,-1,3])
+        normed = np.linalg.norm(r,axis=2)
+        squared = (normed*normed)
+        #triu = np.triu(np.arange(count_elements(squared)).reshape(squared.shape))
+        filtered = squared
+        nans = np.isnan(filtered)
+        filtered[nans] = 0
+        filtered[filtered == np.inf] = 0
+        filtered[filtered == -np.inf] = 0
+        unit = G*(r/filtered[:,:,np.newaxis] )
+        unit[np.isnan(unit)] = 0
+        unit[unit== np.inf] = 0
+        unit[unit == -np.inf] = 0
+
+        self.filterstore = unit.sum(axis=1)
+        try:
+            self.planets_vel += unit.sum(axis=1)*dt
+            self.planets += self.planets_vel*dt
+            self.filterstore = self.planets
+            #time.sleep(1)
+            pass
+        except:
+            pass
+
+    def update1(self):
         dt = self.dt
         for i in range(len(self.planets)):
             p = self.planets[i] 
@@ -64,22 +154,46 @@ class Display:
 
     def draw(self):
         self.win.blit(self.bg,(0,0))
+        plotted = project_polygon(self.planets)
+#        for p in plotted:
         for p in self.planets:
-            try:
-                x,y,_ = p[0]
-                self.win.blit(self.dot_surface,[x,y])
-#                py.draw.circle(self.win,(255,255,255),[x,y],1,1)
-            except:
-                print(p[0])
+            x,y,_ = p 
+            if x!= np.nan and y != np.nan: 
+                toss = rd.randint(0,1)
+                if toss == 1:
+                    self.win.blit(self.dot_surface,[x,y],special_flags=py.BLEND_RGB_ADD)
+                else:
+                    self.win.blit(self.dot_surface1,[x,y],special_flags=py.BLEND_RGB_ADD)
+#            py.draw.circle(self.win,(255,255,255),[x,y],1,1)
+            pass
+        #surf = self.font.render("fps: "+str(1/self.dt),True,(255,255,255),(0,0,0))
+        surf = self.font.render("fps: "+str(int(self.clock.get_fps())),True,(255,0,5),(0,0,0))
+        self.win.blit(surf,(0,0))
 
     def run(self):
         while not self.done:
             self.eventhandler()
-            self.draw()
-            self.update()
-            py.display.update()
+            if self.index%2 == 1:
+                self.draw()
+                py.display.update()
+            if not self.pause:
+                self.update()
+            nowtime = time.time()
+            self.dt = 10*(nowtime - self.lasttime )
+            self.lasttime = nowtime
+            self.calculate_fps()
+            self.clock.tick(120)
+            self.index+=1
+    
+    def calculate_fps(self):
+        if self.fps_count ==200:
+            self.fps_count = 1
+            self.fps_sum = 1/self.dt
+        else:
+            self.fps_sum += 1/self.dt
+            self.fps_count+=1
 
-
+        self.fps = self.fps_sum/self.fps_count
 if __name__=='__main__':
     d = Display()
     d.run()
