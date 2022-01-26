@@ -55,7 +55,6 @@ class Display:
         py.draw.circle(self.dot_surface1,(225,220,225),(r//2,r//2),1,1)
         self.bg = py.Surface((screen_width,screen_height))
         self.bg.fill((30,0,40))
-        self.bg.fill((0,0,0))
         self.font = py.font.Font("freesansbold.ttf",15)
         self.lasttime = time.time() 
         self.planets = np.array([])
@@ -205,6 +204,7 @@ class Display:
             self.fps_count+=1
 
         self.fps = self.fps_sum/self.fps_count
+
 if __name__=='__main__':
     d = Display()
     d.run()
