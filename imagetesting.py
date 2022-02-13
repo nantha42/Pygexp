@@ -9,6 +9,7 @@ py.init()
 screen_width,screen_height = 1500,700
 
 FOV = 90
+WHITE = (255,255,255)
 
 def camera_view(vector, points):
     """
@@ -95,6 +96,16 @@ class Display:
         self.origin = np.array([0.0,0.0])
         self.selected_planet = -1
 
+        self.drag = arr([0,0])
+        self.trails = []
+        self.trails_enabled = False
+
+
+        self.launch_vector = arr([0,0,0])
+        self.launch_enabled = False
+        self.launch_point = arr([0,0]) 
+        self.center_displacement = arr([0,0])
+
         pass
             
     def eventhandler(self):
@@ -111,6 +122,8 @@ class Display:
 
                 if event.key == py.K_l:
                     self.load_particles()
+                if event.key == py.K_t:
+                    self.trails_enabled = not self.trails_enabled
 
                 if event.key == py.K_1:
                     self.mass_selected = 100
@@ -143,7 +156,6 @@ class Display:
                         self.selected_planet -= 1
                         self.selected_planet %= len(self.planets)
 
-
             if event.type == py.KEYUP:
                 if event.key == py.K_a:
                     self.pause = False
@@ -155,44 +167,70 @@ class Display:
             if event.type == py.MOUSEBUTTONDOWN:
                 if(event.button == 1):
                     self.spawn_process1()
+                    self.launch_enabled = True
+                    self.launch_point= arr(py.mouse.get_pos())
 
-                if(event.button>= 4 and event.button%2==0):
-                    self.zoom *= 2 
-                elif(event.button >= 4 and event.button):
-                    self.zoom *= .5 
+                if event.button>=4:
+                    x,y = py.mouse.get_pos() 
+                    x+= self.rad//2
+                    y+= self.rad//2
+                    w,h = screen_width,screen_height
+                    if np.linalg.norm(self.drag) == 0.0:
+                        self.center = np.array([self.origin[0] + x/self.zoom, self.origin[1] + y/self.zoom],dtype=np.float32)
+                      
+                    if(event.button>= 4 and event.button%2==0):
+                        self.zoom *= 2 
+                        self.center_displacement = (-arr([x,y]) + arr([w/2,h/2]))/self.zoom
+                    elif(event.button >= 4 and event.button):
+                        self.zoom *= .5 
+                        self.center_displacement = (-arr([x,y]) + arr([w/2,h/2]))/self.zoom
+                    else:
+                        self.center_displacement = arr([0,0])
 
                 if event.button == 3:
                     self.scroll_enabled = True 
                     self.scroll_start = np.array(py.mouse.get_pos(),dtype=np.float32)
-                    x,y = py.mouse.get_pos() 
-                    np.array([self.origin[0] + x/self.zoom, self.origin[1] + y/self.zoom],dtype=np.float32)
                     self.selected_planet = -1
 
-
             if event.type == py.MOUSEBUTTONUP:
+                if event.button == 1:
+                    self.launch_enabled = False
+                    x,y = self.launch_vector
+                    self.planets_vel[-1] = arr([x,y,0])/self.zoom
+                     
                 if event.button == 3:
                     self.scroll_enabled = False
                     x,y = py.mouse.get_pos() 
-                    self.center = np.array([self.origin[0] + x/self.zoom, self.origin[1] + y/self.zoom],dtype=np.float32)
-
-
+                    if np.linalg.norm(self.drag) == 0.0:
+                        self.center = np.array([self.origin[0] + x/self.zoom, self.origin[1] + y/self.zoom],dtype=np.float32)
+                    else:
+                        self.center -=  self.drag
             
             if event.type == py.MOUSEMOTION:
                 if self.scroll_enabled:
                     cur_pos = np.array(py.mouse.get_pos(),dtype=np.float32)
 
+        
+        if self.launch_enabled: 
+            cx,cy = py.mouse.get_pos()
+            dv = self.launch_point - py.mouse.get_pos()
+            self.launch_vector = dv 
+
         if self.spawn:
             self.spawn_process()
-    
-    def translate(self,points,origin):
-        pass 
 
+        if self.scroll_enabled:
+            cpos = py.mouse.get_pos()
+            self.drag = (cpos-self.scroll_start)/self.zoom
+        else:
+            self.drag = arr([0.0,0.0])
 
     def update(self):
         dt = self.dt
         r = -self.planets.reshape([-1,1,3]) + self.planets.reshape([1,-1,3])
         normed = np.linalg.norm(r,axis=2)
         squared = (normed*normed)
+        quaded = (normed*normed*normed*normed)
         #triu = np.triu(np.arange(count_elements(squared)).reshape(squared.shape))
         filtered = squared
         nans = np.isnan(filtered)
@@ -200,45 +238,46 @@ class Display:
         filtered[filtered == np.inf] = 0
         filtered[filtered == -np.inf] = 0
         unit = self.G*(r/filtered[:,:,np.newaxis] )
+        
+        #filtered = quaded
+        #nans = np.isnan(filtered)
+        #filtered[nans] = 0
+        #filtered[filtered == np.inf] = 0
+        #filtered[filtered == -np.inf] = 0
+        #unit1 = -(self.G**2)*(r/filtered[:,:,np.newaxis] )
+ 
         unit[np.isnan(unit)] = 0
         unit[unit== np.inf] = 0
         unit[unit == -np.inf] = 0
-        unit = self.planets_mass.reshape([1,-1,1])*unit  
-        self.filterstore = unit.sum(axis=1)
+        unit = self.planets_mass.reshape([1,-1,1])*unit 
+
+        #unit1[np.isnan(unit1)] = 0
+        #unit1[unit1== np.inf] = 0
+        #unit1[unit1 == -np.inf] = 0
+        #unit1 = self.planets_mass.reshape([1,-1,1])*unit1
+        
+        #self.filterstore = unit.sum(axis=1)
         try:
+            #self.planets_vel += (unit.sum(axis=1) + unit1.sum(axis=1))*dt
             self.planets_vel += unit.sum(axis=1)*dt
             self.planets += self.planets_vel*dt
-            self.filterstore = self.planets
+            for i in range(len(self.trails)):
+                if len(self.trails[i])>10:
+                    self.trails[i].pop(0)
+                self.trails[i].append(self.planets[i].tolist())
+            #self.filterstore = self.planets
             #time.sleep(1)
             pass
         except:
             pass
-
-    def update1(self):
-        dt = self.dt
-        for i in range(len(self.planets)):
-            p = self.planets[i] 
-            for j in range(i,len(self.planets)):
-                g = self.planets[j]
-                if g[2] != p[2]:
-                    p1,p2 = g[0],p[0]                 
-                    d = (p1-p2)
-                    force = 0.001*d/(np.linalg.norm(d)**2)
-                    p[1] += force*dt
-                    g[1] -= force*dt 
-                    nans = np.isnan(p[1]) 
-                    p[1][nans] = 0.0
-                    nans = np.isnan(g[1])
-                    g[1][nans] = 0.0
-        for i in self.planets:
-            i[0] += i[1]*dt
 
     def draw(self):
         self.win.blit(self.bg,(0,0))
         plotted = project_polygon(self.planets)
 #       for p in plotted:
         index = 0 
-        for p in self.planets:
+        for i in range(len(self.planets)):
+            p = self.planets[i]
             x,y,_ = p 
             if x!= np.nan and y != np.nan: 
                 toss = rd.randint(0,1)
@@ -253,7 +292,24 @@ class Display:
                         self.win.blit(self.dot_surface,[x,y],special_flags=py.BLEND_RGB_ADD)
                     else:
                         self.win.blit(self.dot_surface1,[x,y],special_flags=py.BLEND_RGB_ADD)
+                if self.launch_enabled and i == len(self.planets)-1:
+                    ep = [x+self.rad//2,y+self.rad//2] + self.launch_vector
+                    py.draw.line(self.win,WHITE,[x+self.rad//2,y+self.rad//2],ep,1)
+
             index+=1
+            if self.trails_enabled:
+                trailed = self.trails[i]
+                transformed = []
+                for t in trailed:
+                    x,y,_ = t
+                    x,y = (x-self.origin[0])*self.zoom, (y-self.origin[1])*self.zoom
+                    x+=self.rad//2
+                    y+=self.rad//2
+                    transformed.append([x,y])
+                if len(transformed)>1:
+                    py.draw.lines(self.win,WHITE,False,transformed,1)
+
+
         surf = self.font.render("fps: "+str(int(self.clock.get_fps())),True,(255,0,5),(0,0,0))
         self.win.blit(surf,(0,0))
         surf = self.font.render("Zoom : "+str(self.zoom),True,(255,255,255),(0,0,0))
@@ -276,18 +332,21 @@ class Display:
             self.append_planet(p1,vel,mass)
     
     def recenter(self,coord):
-        #dx,dy = py.mouse.get_pos()
-        #dx,dy = self.center[0] + dx/self.zoom, self.center[1] + dy/self.zoom
-        #self.center = np.array([dx,dy],dtype=np.float32)
-        #self.origin = np.array([self.center[0] - (screen_width/2)/self.zoom, self.center[1] - (screen_height/2)/self.zoom])
-        #center point is actual coordinate
-        #origin point is 
-
         cx,cy = coord 
+        mx,my = py.mouse.get_pos()
         w,h = screen_width,screen_height
         ox = cx - (w/2)/self.zoom 
         oy = cy - (h/2)/self.zoom
         self.origin = np.array([ox,oy],dtype=np.float32) 
+
+    def recenter1(self,coord):
+        cx,cy = coord 
+        mx,my = py.mouse.get_pos()
+        w,h = screen_width,screen_height
+        ox = cx - (w/2)/self.zoom 
+        oy = cy - (h/2)/self.zoom
+        self.origin = np.array([ox,oy],dtype=np.float32) + self.center_displacement
+
         
 
     def spawn_process1(self):
@@ -301,6 +360,7 @@ class Display:
         sign = -1 if self.dark else 1
         mass = sign*(self.mass_selected + rd.randint(1,10))
         self.append_planet(pos,vel,mass)
+        self.trails.append([self.planets[-1]])
  
 #    def spawn_process1(self):
 #        dx,dy = py.mouse.get_pos()
@@ -351,6 +411,7 @@ class Display:
             self.planets = stats["pos"]
             self.planets_vel = stats["vel"]
             self.planets_mass = stats["mass"]
+            self.trails = [[] for i in range(len(self.planets))]
 
     def run(self):
         while not self.done:
@@ -360,16 +421,16 @@ class Display:
                 sx,sy,_ = starpoint
                 self.recenter(arr([sx,sy]))
             else:
-                self.recenter(self.center)
+                self.recenter(self.center - self.drag)
             self.draw()
             py.display.update()
-            if not self.pause:
+            if not self.pause and not self.launch_enabled:
                 self.update()
             nowtime = time.time()
             self.dt = 10*(nowtime - self.lasttime )
             self.lasttime = nowtime
             self.calculate_fps()
-            self.clock.tick(120)
+            self.clock.tick(60)
             self.index+=1
     
     def calculate_fps(self):
