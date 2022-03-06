@@ -53,21 +53,7 @@ class Display:
         self.clock = py.time.Clock()
         self.done = False
         self.dt = 0.1 
-        r = 64 
-        self.rad =  r
-        self.dot_surface = py.Surface((r,r)) 
-        self.dot_surface1 = py.Surface((r,r))
-        self.dot_selected_surface = py.Surface((r,r))
-        py.draw.circle(self.dot_surface,(1,1,1),(r//2,r//2),r//2,r//2)
-        py.draw.circle(self.dot_surface,(255,215,0),(r//2,r//2),1,1)
-        
-        py.draw.circle(self.dot_surface1,(1,1,1),(r//2,r//2),r//2,r//2)
-        py.draw.circle(self.dot_surface1,(225,220,225),(r//2,r//2),1,1)
-
-
-        py.draw.circle(self.dot_selected_surface,(1,1,1),(r//2,r//2),r//2,r//2)
-        py.draw.circle(self.dot_selected_surface,(225,220,225),(r//2,r//2),2,2)
-
+        self.sdt = self.dt
 
 
         self.bg = py.Surface((screen_width,screen_height))
@@ -88,7 +74,7 @@ class Display:
         self.G = 0.010
         self.mass_selected = 1
         self.dark = False
-        self.zoom = 1
+        self.zoom = 1.0
         self.camera = np.array([1.0,1.0])
         self.scroll_enabled = False
         self.scroll_start = np.array([screen_width/2,screen_height/2])
@@ -105,8 +91,42 @@ class Display:
         self.launch_enabled = False
         self.launch_point = arr([0,0]) 
         self.center_displacement = arr([0,0])
+        self.create_surfaces() 
+        self.zoomed_in_point = None
+        self.prev_zoom = 1
+        self.graph_factor = 1.0
 
         pass
+
+    def create_surfaces(self):
+        r = int(max(min(64*self.zoom,512),64))
+        sz = int(max(min(self.zoom,64),1))
+        self.rad = r
+        self.dot_surface = py.Surface((r,r)) 
+        self.dot_surface1 = py.Surface((r,r))
+        self.x_mark = py.Surface((16,16))
+
+        self.dot_selected_surface = py.Surface((r,r))
+        py.draw.circle(self.dot_surface,(1,1,1),(r//2,r//2),r//2,r//2)
+        py.draw.circle(self.dot_surface,(255,215,0),(r//2,r//2),sz,sz)
+        
+        py.draw.circle(self.dot_surface1,(1,1,1),(r//2,r//2),r//2,r//2)
+        py.draw.circle(self.dot_surface1,(225,220,225),(r//2,r//2),sz,sz)
+
+
+        py.draw.circle(self.dot_selected_surface,(1,1,1),(r//2,r//2),r//2,r//2)
+        py.draw.circle(self.dot_selected_surface,(225,220,225),(r//2,r//2),sz,sz)
+        self.surfaces = {"star":self.dot_surface, "starG":self.dot_surface1, "star_control":self.dot_selected_surface}
+        self.recalculated_surface = dict(self.surfaces)
+        py.draw.line(self.x_mark,(255,255,255),[0,0],[16,16],1)
+        py.draw.line(self.x_mark,(255,255,255),[0,16],[16,0],1)
+
+
+        self.graph_line_v = py.Surface((1,screen_height))
+        self.graph_line_h = py.Surface((screen_width,1)) 
+        py.draw.line(self.graph_line_v,(10,10,10),[0,0],[0,screen_height],1)
+        py.draw.line(self.graph_line_h,(10,10,10),[0,0],[screen_width,0],1)
+
             
     def eventhandler(self):
         for event in py.event.get():
@@ -114,12 +134,9 @@ class Display:
                 exit()
 
             if event.type == py.KEYDOWN:
-                if event.key == py.K_a:
-                    self.pause = True
-                    pass
                 if event.key == py.K_s:
                     self.save_particles()
-
+                
                 if event.key == py.K_l:
                     self.load_particles()
                 if event.key == py.K_t:
@@ -146,6 +163,24 @@ class Display:
                     self.mass_selected = 900
                 if event.key == py.K_0:
                     self.mass_selected = 1 
+                if event.key == py.K_a:
+                    self.mass_selected = 10000
+                if event.key == py.K_b:
+                    self.mass_selected = 100000 
+                if event.key == py.K_c:
+                    self.mass_selected = 10000000000
+
+                if event.key == py.K_o:
+                    self.center = arr([0,0])
+                if event.key == py.K_LEFT:
+                    self.sdt *= 0.1 
+                    print(self.sdt)
+                if event.key == py.K_RIGHT:
+                    self.sdt *= 10 
+                    self.sdt = min(0.1,self.sdt)
+                    print(self.sdt)
+
+
                 if event.key == py.K_d:
                     self.dark = not self.dark
                 if len(self.planets) > 0:
@@ -157,8 +192,8 @@ class Display:
                         self.selected_planet %= len(self.planets)
 
             if event.type == py.KEYUP:
-                if event.key == py.K_a:
-                    self.pause = False
+                if event.key == py.K_p:
+                    self.pause =  not self.pause 
 
                 if event.key == py.K_s:
                     self.spawn = False
@@ -172,19 +207,24 @@ class Display:
 
                 if event.button>=4:
                     x,y = py.mouse.get_pos() 
-                    x+= self.rad//2
-                    y+= self.rad//2
+                    self.zoomed_in_point = arr([x,y])
                     w,h = screen_width,screen_height
                     if np.linalg.norm(self.drag) == 0.0:
                         self.center = np.array([self.origin[0] + x/self.zoom, self.origin[1] + y/self.zoom],dtype=np.float32)
                       
                     if(event.button>= 4 and event.button%2==0):
-                        self.zoom *= 2 
-                        self.center_displacement = (-arr([x,y]) + arr([w/2,h/2]))/self.zoom
+                        self.prev_zoom = self.zoom
+                        self.zoom *= 1.2 
+                        self.recalculate_surfaces()
+                        self.update_graph()
                     elif(event.button >= 4 and event.button):
-                        self.zoom *= .5 
-                        self.center_displacement = (-arr([x,y]) + arr([w/2,h/2]))/self.zoom
+                        self.prev_zoom = self.zoom
+                        #self.zoom *= .9 
+                        self.zoom *= 1/(1.2) 
+                        self.update_graph()
+                        self.recalculate_surfaces()
                     else:
+                        self.zoomed_in_point = None
                         self.center_displacement = arr([0,0])
 
                 if event.button == 3:
@@ -224,14 +264,13 @@ class Display:
             self.drag = (cpos-self.scroll_start)/self.zoom
         else:
             self.drag = arr([0.0,0.0])
-
+    
     def update(self):
-        dt = self.dt
+        dt = self.sdt
         r = -self.planets.reshape([-1,1,3]) + self.planets.reshape([1,-1,3])
         normed = np.linalg.norm(r,axis=2)
         squared = (normed*normed)
         quaded = (normed*normed*normed*normed)
-        #triu = np.triu(np.arange(count_elements(squared)).reshape(squared.shape))
         filtered = squared
         nans = np.isnan(filtered)
         filtered[nans] = 0
@@ -239,26 +278,13 @@ class Display:
         filtered[filtered == -np.inf] = 0
         unit = self.G*(r/filtered[:,:,np.newaxis] )
         
-        #filtered = quaded
-        #nans = np.isnan(filtered)
-        #filtered[nans] = 0
-        #filtered[filtered == np.inf] = 0
-        #filtered[filtered == -np.inf] = 0
-        #unit1 = -(self.G**2)*(r/filtered[:,:,np.newaxis] )
- 
+
         unit[np.isnan(unit)] = 0
         unit[unit== np.inf] = 0
         unit[unit == -np.inf] = 0
         unit = self.planets_mass.reshape([1,-1,1])*unit 
-
-        #unit1[np.isnan(unit1)] = 0
-        #unit1[unit1== np.inf] = 0
-        #unit1[unit1 == -np.inf] = 0
-        #unit1 = self.planets_mass.reshape([1,-1,1])*unit1
-        
-        #self.filterstore = unit.sum(axis=1)
+       
         try:
-            #self.planets_vel += (unit.sum(axis=1) + unit1.sum(axis=1))*dt
             self.planets_vel += unit.sum(axis=1)*dt
             self.planets += self.planets_vel*dt
             for i in range(len(self.trails)):
@@ -270,10 +296,98 @@ class Display:
             pass
         except:
             pass
-
+    
     def draw(self):
         self.win.blit(self.bg,(0,0))
-        plotted = project_polygon(self.planets)
+        for i in range(len(self.planets)):
+            p = self.planets[i]
+            x,y,_ = p
+            if x!= np.nan and y!= np.nan:
+                toss = rd.randint(0,1)
+                converted_point = self.space_to_screen(arr([x,y]))
+                x,y = converted_point
+                if i == self.selected_planet:
+                    self.win.blit(self.surfaces["star_control"],[x,y],special_flag=py.BLEND_RGB_ADD)   
+                else:
+                    x -= self.rad//2
+                    y -= self.rad//2
+                    if toss == 1:
+                        self.win.blit(self.surfaces["star"],[x,y],special_flags=py.BLEND_RGB_ADD)                     
+                    else:
+                        self.win.blit(self.surfaces["starG"],[x,y],special_flags=py.BLEND_RGB_ADD) 
+                if self.launch_enabled and i == len(self.planets)-1:
+                    ep = [x+self.rad//2,y+self.rad//2] + self.launch_vector
+                    py.draw.line(self.win,WHITE,[x+self.rad//2,y+self.rad//2],ep,1)
+            if self.trails_enabled:
+                trailed = self.trails[i]
+                transformed = []
+                for t in trailed:
+                    x,y,_ = t
+                    x,y = self.space_to_screen(arr([x,y]))
+                    transformed.append([x,y])
+                if len(transformed)>1:
+                    py.draw.lines(self.win,WHITE,False,transformed,1)
+
+        self.draw_texts()
+        self.draw_horizontal_graph()
+        self.draw_vertical_graph()
+    
+
+    def update_graph(self):
+        x,y,_ = self.screen_to_space(arr([screen_width,screen_height])) 
+        nlines  = x//self.graph_factor
+        if nlines > 70: 
+            self.graph_factor*=10
+        elif nlines < 60:
+            self.graph_factor/=10
+    
+    def space_dx(self,x):
+        return x/self.zoom
+        pass
+    
+    def screen_dx(self, x):
+        return x*self.zoom
+        pass
+
+    def draw_horizontal_graph(self):
+        x,y,_ = self.screen_to_space(arr([0,0])) 
+        ex,ey,_ = self.screen_to_space(arr([0,screen_height]))
+        dy = int(ey - y)
+        grid_height = 20 
+        start = int(y - (y % grid_height))
+        n = (int(ey) - start)//grid_height
+        factor = 1
+        while self.screen_dx(grid_height*factor) <= 10:
+            factor*= 20 
+        print("drawing horizontal") 
+        sys = []
+        for i in range(start,int(ey),grid_height*factor): 
+            sx,sy = self.space_to_screen(arr([0,i]))
+            self.win.blit(self.graph_line_h,[0,sy],special_flags=py.BLEND_RGB_ADD)
+            sys.append(sy)
+        print(sys)
+
+
+    def draw_vertical_graph(self):
+        x,y,_ = self.screen_to_space(arr([0,0])) 
+        ex,ey,_ = self.screen_to_space(arr([screen_width,0]))
+        dx = int(ex - x)
+        grid_width = 20 
+        start = int(x - (x % grid_width))
+        n = (int(ex) - start)//grid_width 
+        factor = 1
+        while self.screen_dx(grid_width*factor) <= 10:
+            factor*= 20 
+        #print("Screen :", self.screen_dx(grid_width))
+        #screen_gap = self.screen_dx(grid_width)
+        #if screen_gap
+
+        for i in range(start,int(ex),grid_width*factor): 
+            sx,sy = self.space_to_screen(arr([i,0]))
+            self.win.blit(self.graph_line_v,[sx,0],special_flags=py.BLEND_RGB_ADD)
+
+    def draw1(self):
+        self.win.blit(self.bg,(0,0))
 #       for p in plotted:
         index = 0 
         for i in range(len(self.planets)):
@@ -286,12 +400,14 @@ class Display:
                 #x,y = (screen_width/2)*(1-self.zoom) + x*self.zoom,(screen_height/2)*(1-self.zoom) + y*self.zoom
                 #x,y = x+(-self.scroll_start[0]),y+(-self.scroll_start[1])
                 if index == self.selected_planet:
-                    self.win.blit(self.dot_selected_surface,[x,y],special_flags=py.BLEND_RGB_ADD)
+                   self.win.blit(self.surfaces["star_control"],[x,y],special_flags=py.BLEND_RGB_ADD)
                 else:
+                    x -= self.rad//2 
+                    y -= self.rad//2
                     if toss == 1:
-                        self.win.blit(self.dot_surface,[x,y],special_flags=py.BLEND_RGB_ADD)
+                        self.win.blit(self.surfaces["star"],[x,y],special_flags=py.BLEND_RGB_ADD)
                     else:
-                        self.win.blit(self.dot_surface1,[x,y],special_flags=py.BLEND_RGB_ADD)
+                        self.win.blit(self.surfaces["starG"],[x,y],special_flags=py.BLEND_RGB_ADD)
                 if self.launch_enabled and i == len(self.planets)-1:
                     ep = [x+self.rad//2,y+self.rad//2] + self.launch_vector
                     py.draw.line(self.win,WHITE,[x+self.rad//2,y+self.rad//2],ep,1)
@@ -303,18 +419,27 @@ class Display:
                 for t in trailed:
                     x,y,_ = t
                     x,y = (x-self.origin[0])*self.zoom, (y-self.origin[1])*self.zoom
-                    x+=self.rad//2
-                    y+=self.rad//2
+                    x,y = x+self.rad//2, y+self.rad//2
                     transformed.append([x,y])
                 if len(transformed)>1:
                     py.draw.lines(self.win,WHITE,False,transformed,1)
+        self.draw_texts()
 
 
-        surf = self.font.render("fps: "+str(int(self.clock.get_fps())),True,(255,0,5),(0,0,0))
+    def draw_texts(self):
+        surf = self.font.render("fps: "+str(int(self.clock.get_fps())),True,(255,255,255),(30,0,40))
         self.win.blit(surf,(0,0))
         surf = self.font.render("Zoom : "+str(self.zoom),True,(255,255,255),(0,0,0))
         self.win.blit(surf,(0,20))
-    
+        surf = self.font.render("Planets: "+str(len(self.planets)),True,(255,255,255),(30,0,40))
+        self.win.blit(surf,(0,40))
+        mix,miy = py.mouse.get_pos()
+        x = self.origin[0] + mix/self.zoom
+        y = self.origin[1] + miy/self.zoom
+        surf = self.font.render(f"{int(x)},{int(y)}",True,(255,255,255),(30,0,40))
+        self.win.blit(surf,(mix+10,miy))
+        self.win.blit(self.x_mark,(screen_width//2-8,screen_height//2-8),special_flags=py.BLEND_RGB_ADD)
+   
     def spawn_process(self):
         center = np.array([screen_width//2, screen_height//2,rd.randint(-10,10)],dtype=np.float32)
         for i in range(2): 
@@ -331,28 +456,69 @@ class Display:
             mass = np.random.randint(1,1000)
             self.append_planet(p1,vel,mass)
     
-    def recenter(self,coord):
-        cx,cy = coord 
-        mx,my = py.mouse.get_pos()
+    def space_to_screen(self,points):
+        if len(points.shape) == 3: 
+            screen_points = (points-self.origin)*self.zoom
+            return screen_point
+        else:
+            x,y = points
+            screen_point = [(x-self.origin[0])*self.zoom, (y-self.origin[1])*self.zoom]
+            return screen_point
+            
+
+    def screen_to_space(self,point):
+        x,y = point
+        space_point = arr([self.origin[0] + x/self.zoom, self.origin[1] + y/self.zoom,0.0])
+        return space_point 
+
+    
+    def calculate_origin(self,coord):
+        x,y = coord
         w,h = screen_width,screen_height
-        ox = cx - (w/2)/self.zoom 
-        oy = cy - (h/2)/self.zoom
-        self.origin = np.array([ox,oy],dtype=np.float32) 
+        ox = x - (w/2)/self.zoom 
+        oy = y - (h/2)/self.zoom 
+        self.origin = np.array([ox,oy])
+
+    #def recenter(self,coord):
+    #    cx,cy = coord 
+    #    mx,my = py.mouse.get_pos()
+    #    w,h = screen_width,screen_height
+    #    #if self.zoomed_in_point is not None:
+    #    #    print("zoomed in point")
+    #    #    vx,vy = self.zoomed_in_point[0], self.zoomed_in_point[1]
+    #    #    ox = cx - (vx)/self.prev_zoom 
+    #    #    oy = cy - (vy)/self.prev_zoom
+    #    #    self.zoomed_in_point = None
+    #    #else:
+    #    ox = cx - (w/2)/self.zoom 
+    #    oy = cy - (h/2)/self.zoom
+    #    
+    #    #if self.zoomed_in_point is not None:
+    #    #    mx,my = self.zoomed_in_point
+    #    #    vx,vy = self.origin[0]+mx/self.zoom, self.origin[1]+my/self.zoom
+    #    #    ox -= (cx - vx)
+    #    #    oy -= (cy - vy)
+    #    #    self.zoomed_in_point = None
+    #         
+    #    self.origin = np.array([ox,oy],dtype=np.float32) 
 
     def recenter1(self,coord):
         cx,cy = coord 
         mx,my = py.mouse.get_pos()
         w,h = screen_width,screen_height
+        w,h = self.center_displacement[0], self.center_displacement[1]
         ox = cx - (w/2)/self.zoom 
         oy = cy - (h/2)/self.zoom
+        #ox = cx - mx/self.zoom
+        #oy = cy - my/self.zoom
         self.origin = np.array([ox,oy],dtype=np.float32) + self.center_displacement
-
+ 
         
 
     def spawn_process1(self):
         dx,dy = py.mouse.get_pos()
-        dx-=self.rad//2
-        dy-=self.rad//2
+        #dx-=self.rad//2
+        #dy-=self.rad//2
         dx,dy = dx/self.zoom, dy/self.zoom
         x,y = self.origin[0]+dx,self.origin[1] + dy
         pos = [x,y,rd.randint(-10,10)]
@@ -412,16 +578,29 @@ class Display:
             self.planets_vel = stats["vel"]
             self.planets_mass = stats["mass"]
             self.trails = [[] for i in range(len(self.planets))]
+    
+    def resize_surface(self,surf):
+        if self.zoom>=8:
+            size = [2*(self.zoom-7),(self.zoom-7)*2]
+            dest_surf = py.transform.scale(surf,size)
+            return surf
+        else:
+            return surf
+
+    def recalculate_surfaces(self):
+        self.create_surfaces()
+            
 
     def run(self):
         while not self.done:
             self.eventhandler()
-            if self.selected_planet > -1:
-                starpoint = self.planets[self.selected_planet]
-                sx,sy,_ = starpoint
-                self.recenter(arr([sx,sy]))
-            else:
-                self.recenter(self.center - self.drag)
+#            if self.selected_planet > -1:
+#                starpoint = self.planets[self.selected_planet]
+#                sx,sy,_ = starpoint
+#                self.recenter(arr([sx,sy]))
+#            else:
+#                self.recenter(self.center - self.drag)
+            self.calculate_origin(self.center - self.drag)
             self.draw()
             py.display.update()
             if not self.pause and not self.launch_enabled:
