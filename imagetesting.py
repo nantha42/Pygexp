@@ -5,6 +5,8 @@ import random as rd
 import numpy as np
 import math
 from numpy import array as array
+from utils import *
+from compute_faster import *
 py.init()
 screen_width,screen_height = 1500,700
 
@@ -18,33 +20,6 @@ def camera_view(vector, points):
         a triangular ratio. 
     """
     pass
-
-def count_elements(x):
-    ans = 1
-    for i in range(len(x.shape)):
-       ans *= x.shape[i] 
-    return ans 
-
-def ptrin(x):
-    print(x)
-    time.sleep(1)
-
-def norm(x):
-    """Returns normal of a nd array""" 
-    return x/np.linalg.norm(x)
-
-def arr(x):
-    return np.array(x,dtype=np.float32)
-
-def project_polygon(polygon):
-    projected_points = []
-    for point in polygon:
-        x_angle = math.atan2(point[0], point[2])
-        y_angle = math.atan2(point[1], point[2])
-        x = x_angle / math.radians(FOV) * screen_width + screen_height // 2
-        y = y_angle / math.radians(FOV) * screen_width + screen_width // 2
-        projected_points.append([x, y])
-    return projected_points
 
 class Display:
     def __init__(self):
@@ -235,6 +210,7 @@ class Display:
             if event.type == py.MOUSEBUTTONUP:
                 if event.button == 1:
                     self.launch_enabled = False
+                    print(self.launch_vector)
                     x,y = self.launch_vector
                     self.planets_vel[-1] = arr([x,y,0])/self.zoom
                      
@@ -265,7 +241,16 @@ class Display:
         else:
             self.drag = arr([0.0,0.0])
     
-    def update(self):
+    def compute_fast(self):
+        print("U: ",self.planets)
+        computer = Compute_fast(self.planets,self.planets_vel,self.planets_mass) 
+        computer.update() 
+        self.planets = computer.pos
+        self.planets_vel = computer.vel
+        self.planets_masses = computer.masses
+
+
+    def compute_accurate(self):
         dt = self.sdt
         r = -self.planets.reshape([-1,1,3]) + self.planets.reshape([1,-1,3])
         normed = np.linalg.norm(r,axis=2)
@@ -470,7 +455,6 @@ class Display:
         x,y = point
         space_point = arr([self.origin[0] + x/self.zoom, self.origin[1] + y/self.zoom,0.0])
         return space_point 
-
     
     def calculate_origin(self,coord):
         x,y = coord
@@ -478,29 +462,6 @@ class Display:
         ox = x - (w/2)/self.zoom 
         oy = y - (h/2)/self.zoom 
         self.origin = np.array([ox,oy])
-
-    #def recenter(self,coord):
-    #    cx,cy = coord 
-    #    mx,my = py.mouse.get_pos()
-    #    w,h = screen_width,screen_height
-    #    #if self.zoomed_in_point is not None:
-    #    #    print("zoomed in point")
-    #    #    vx,vy = self.zoomed_in_point[0], self.zoomed_in_point[1]
-    #    #    ox = cx - (vx)/self.prev_zoom 
-    #    #    oy = cy - (vy)/self.prev_zoom
-    #    #    self.zoomed_in_point = None
-    #    #else:
-    #    ox = cx - (w/2)/self.zoom 
-    #    oy = cy - (h/2)/self.zoom
-    #    
-    #    #if self.zoomed_in_point is not None:
-    #    #    mx,my = self.zoomed_in_point
-    #    #    vx,vy = self.origin[0]+mx/self.zoom, self.origin[1]+my/self.zoom
-    #    #    ox -= (cx - vx)
-    #    #    oy -= (cy - vy)
-    #    #    self.zoomed_in_point = None
-    #         
-    #    self.origin = np.array([ox,oy],dtype=np.float32) 
 
     def recenter1(self,coord):
         cx,cy = coord 
@@ -512,7 +473,6 @@ class Display:
         #ox = cx - mx/self.zoom
         #oy = cy - my/self.zoom
         self.origin = np.array([ox,oy],dtype=np.float32) + self.center_displacement
- 
         
 
     def spawn_process1(self):
@@ -528,31 +488,7 @@ class Display:
         self.append_planet(pos,vel,mass)
         self.trails.append([self.planets[-1]])
  
-#    def spawn_process1(self):
-#        dx,dy = py.mouse.get_pos()
-#        dx-=self.rad//2
-#        dy-=self.rad//2
-#        x = (dx - (1-self.zoom)*(screen_width/2) )/self.zoom
-#        y = (dy - (1-self.zoom)*(screen_height/2) )/self.zoom
-#        ang = np.radians(rd.randint(0,360))
-#        u,v = np.cos(ang),np.sin(ang) 
-#        #if self.first_spawned:
-#        #    dis = rd.randint(0,30) 
-#        #    x += u*dis
-#        #    y += v*dis
-#
-##        x-=self.rad//2
-##        y-=self.rad//2
-#        dy = rd.randint(-10,10)
-#        z = 0
-#        x,y,z = x*1.0,(y)*1.0,(z+dy)*1.0
-#
-#        pos = [x,y,z]
-#        vel = [rd.randint(-2,2)*0.1,rd.randint(-2,2)*0.1,rd.randint(-1,1)*0.1]
-#        sign = -1 if self.dark else 1
-#        mass = sign*(self.mass_selected + rd.randint(1,10))
-#        self.append_planet(pos,vel,mass)
-    
+   
     def append_planet(self,p,v,m=1):
         self.planets = self.planets.tolist()
         self.planets_vel= self.planets_vel.tolist()
@@ -589,22 +525,17 @@ class Display:
 
     def recalculate_surfaces(self):
         self.create_surfaces()
-            
 
     def run(self):
         while not self.done:
             self.eventhandler()
-#            if self.selected_planet > -1:
-#                starpoint = self.planets[self.selected_planet]
-#                sx,sy,_ = starpoint
-#                self.recenter(arr([sx,sy]))
-#            else:
-#                self.recenter(self.center - self.drag)
             self.calculate_origin(self.center - self.drag)
             self.draw()
             py.display.update()
             if not self.pause and not self.launch_enabled:
-                self.update()
+#                self.compute_accurate()
+                self.compute_fast()
+
             nowtime = time.time()
             self.dt = 10*(nowtime - self.lasttime )
             self.lasttime = nowtime
