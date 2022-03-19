@@ -33,8 +33,7 @@ def compute_gravity(p1,m1,p2,m2):
     """returns a f1,f2 which are ndarray"""
     r = np.linalg.norm(p2-p1)
     f1 = m2/r**2
-    f2 = m1/r**2
-    return [f1,f2]
+    return f1*(p2-p1)/r
 
 def compute_gravity(x1,y1,m1,x2,y2,m2):
     """returns a f1,f2 which are ndarray"""

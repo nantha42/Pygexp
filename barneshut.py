@@ -35,6 +35,7 @@ class Body:
     def isempty(self):
         if self.x==0 and self.y == 0 and self.mass == 0:
             return True
+        return False
 
 class Quad:
     def __init__(self,x,y,length):
