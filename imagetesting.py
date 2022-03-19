@@ -32,7 +32,6 @@ class Display:
         self.dt = 0.1 
         self.sdt = self.dt
 
-
         self.bg = py.Surface((screen_width,screen_height))
         self.bg.fill((30,0,40))
         self.font = py.font.Font("freesansbold.ttf",15)
