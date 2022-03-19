@@ -5,19 +5,24 @@ def add_bodies(b1,b2):
     tm = b1.mass + b2.mass
     com = (b1.pos*b1.mass + b2.pos*b2.mass)/tm
     ret = Body()
-    ret.set(com,None,mass)
+    ret.set(com,None,tm,-1)
     return ret
  
 
 class Body:
     def __init__(self):
         self.pos =None 
-        self.vel =None 
-        self.mass =None 
+        self.vel = np.array([0.0,0.0,0.0])
+        self.mass = 0.0
         self.id =-1
         self.force = np.array([0.0,0.0,0.0]) 
+        self.quad_start = None
 
+    def reset_force(self):
+        self.force = np.array([0.0,0.0,0.0]) 
 
+    def stats(self):
+        print("Msss: ",self.mass," ID: ",self.id)
 
     def set(self,pos,vel,mass,idd=-1):
         self.pos = pos
@@ -31,12 +36,10 @@ class Body:
         self.mass = b.mass
         self.id = b.id
 
-    
-
     def isempty(self): 
-        if self.pos == None:
-            return True
-        return False
+        if self.pos is not None:
+            return False 
+        return True 
 
 class Quad:
     def __init__(self,start=None,length=0):
@@ -61,38 +64,42 @@ class Quad:
 
 
     def get_correct_quad(self,pos):
-        dpos = np.array(pos - self.start,dtype=np.int)
-        dpos /= self.l/2
-        ind = dpos[0] + dpos[1]*2 
-        if 0 <= ind <= 3:
-            return ind
-        else:
-            print("outside range of quad")
+        dpos = np.array(pos - self.start,dtype=np.float32)
+        dpos = dpos/(self.l/2.0)
+        try:
+            ind = int(dpos[0] + dpos[1]*2)
+            if 0 <= ind <= 3:
+                return ind
+            else:
+                print("outside range of quad",ind)
+                return -1
+        except:
+            print(dpos)
             return -1
 
  
     def __get_sx_sy(self): 
-        return self.pos[0],self.pos[1]
+        return self.start[0],self.start[1]
 
     def NW(self):
-        s = self.l//2
+        s = self.l/2
         sx,sy = self.__get_sx_sy()
-        return Quad(np.array([sx,sy]),,s)
+        return Quad(np.array([sx,sy,0.0]),s)
     
     def NE(self):
-        s = self.l//2
+        s = self.l/2
         sx,sy = self.__get_sx_sy()
-        return  Quad(np.array([sx + s,sy]),s)
+        return  Quad(np.array([sx + s,sy,0.0]),s)
     
     def SW(self):
-        s = self.l//2
+        s = self.l/2
         sx,sy = self.__get_sx_sy()
-        return Quad(np.array([sx ,sy + s]),s)
+        return Quad(np.array([sx ,sy + s,0.0]),s)
     
     def SE(self):
-        s = self.l//2
+        s = self.l/2
         sx,sy = self.__get_sx_sy()
-        return Quad(np.array([sx + s,sy + s]),s)
+        return Quad(np.array([sx + s,sy + s,0.0]),s)
 
 
 class BarnesHut:
@@ -100,15 +107,18 @@ class BarnesHut:
         self.quad = quad 
         self.body = Body()
         self.subhuts = [None,None,None,None]
-        self.theta = 0.1
+        self.theta = 0.5
+        self.count = 0
         pass
  
 
     def insert(self,b):
+        self.count+=1
         """should not pass an copied object"""
         if self.body.isempty():
             """empty hut node"""
             self.body = b
+            self.body.quad_start = self.quad.start
         
         elif self.body.id == -1:
             """internal node, just add with current body and insert
@@ -118,29 +128,36 @@ class BarnesHut:
             
         else:
             """leaf node,should be handle with care"""
-           new_body = add_body.add(self.body,b)
-           current_body = self.body
-           self.body = new_body
+            new_body = add_bodies(self.body,b)
+            current_body = self.body
+            self.body = new_body
 
-           self.insert_into_quad(b)
-           self.insert_into_quad(current_body)
+            self.insert_into_quad(b)
+            self.insert_into_quad(current_body)
+        return self.count 
     
     def insert_into_quad(self,b):
         i = self.quad.get_correct_quad(b.pos) 
+        print("b:",b.pos)
+        i = int(i)
         if i != -1:
-            Q = self.quad.get_quad(i)
-            if self.subhuts[i] == None:
+            Q = self.quad.get_quad(int(i))
+            if self.subhuts[i] is None:
                 self.subhuts[i] = BarnesHut(Q)
-            self.subhuts[i].insert(b)
+                self.subhuts[i].count = self.count
+            self.count = self.subhuts[i].insert(b) + 1
+        else:
+            print("insertion failed")
 
-    def update_force(self,b): 
+    def update_force(self,b,G): 
         if self.body!= -1 and b.id != self.body.id:
-            b.force += compute_gravity(b.pos,b.body.mass,self.body.pos,self.body.mass)
+            b.force += compute_gravity_vector(b.pos,b.mass,self.body.pos,self.body.mass,G)
             return
         d = np.linalg.norm(self.body.pos-b.pos) 
         if self.quad.l/d < self.theta:
-            force = compute_gravity(b.pos,b.mass,self.body.pos,self.body.mass)
+            force = compute_gravity_vector(b.pos,b.mass,self.body.pos,self.body.mass,G)
             b.force += force
+            return
         else:
             for hut in self.subhuts:
                 if hut is not None:
@@ -150,7 +167,17 @@ class BarnesHut:
         if self.body.id != -1:
             self.body.vel += self.body.force * dt 
             self.body.pos += self.body.vel* dt
+            print(self.body.id,"  ",self.body.pos)
         else:
             for hut in self.subhuts:
                 if hut is not None:
                     hut.update_positions(dt)
+
+    def draw_tree(self,string):
+        
+        string += str(self.body.id) + " "
+        for hut in self.subhuts:
+            if hut is not None:
+                string += hut.draw_tree(string)
+        return string
+

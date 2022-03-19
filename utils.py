@@ -29,11 +29,12 @@ def project_polygon(polygon):
         projected_points.append([x, y])
     return projected_points
 
-def compute_gravity(p1,m1,p2,m2):
+def compute_gravity_vector(p1,m1,p2,m2,G):
     """returns a f1,f2 which are ndarray"""
     r = np.linalg.norm(p2-p1)
-    f1 = m2/r**2
-    return f1*(p2-p1)/r
+    unit_vec = (p2-p1)/np.linalg.norm(p2-p1)
+    f1 = G*m2/r**2
+    return f1*unit_vec
 
 def compute_gravity(x1,y1,m1,x2,y2,m2):
     """returns a f1,f2 which are ndarray"""

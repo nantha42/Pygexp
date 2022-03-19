@@ -7,7 +7,7 @@ import math
 from numpy import array as array
 from utils import *
 from compute_faster import *
-from barneshut import *
+from barnesalgo import *
 
 py.init()
 screen_width,screen_height = 1500,700
@@ -244,26 +244,65 @@ class Display:
             self.drag = arr([0.0,0.0])
     
     def compute_fast(self):
-        root_quad = Quad(-5e5,-5e5,1e6)
-        root = Barneshut(root_quad)
+        root_quad = Quad(np.array([-5e1,-5e1, 0]),1e2)
+        root = BarnesHut(root_quad)
         timer = Timer("Tree") 
+        #construct tree
+        max_height = 0
         for b in self.bodies:
-            body = Body()
-            body.copy(b)
-            root.insert(body)
+            root.insert(b)
+            max_height = max(root.count,max_height)
+            root.count = 0
+#        print("Tree height:",max_height)
 
-        for i in range(len(self.bodies)):
-            b = self.bodies[i]
-            b.force = np.array([0.0,0.0,0.0])
-            root.update_force(b) 
-            self.planets_vel[i] +=  b.force*self.dt
+        #calculate forces
+        for b in self.bodies:
+            b.reset_force()
+            root.update_force(b,self.G)
 
-        for i in range(len(self.bodies)):
-            b = self.bodies[i]
-            b.x += self.planets_vel[i][0] * self.dt
-            b.y += self.planets_vel[i][1] * self.dt
-            self.planets[i][0] = b.x
-            self.planets[i][1] = b.y
+        for b in self.bodies:
+            print(b.id, " ",b.quad_start)
+        
+        #for b in self.bodies:
+        #    b.vel += b.force * self.dt
+        #    b.pos += b.vel * self.dt
+        #print("********drawing**********")
+        #queue = [root,0]
+        #strin = ""
+        #while len(queue) > 0:
+        #    Q = queue.pop(0)
+        #    if type(Q) != type(0):
+        #        strin += str(root.body.id) + " "
+        #        for hut in Q.subhuts:
+        #            if hut != None:
+        #                queue.append(hut) 
+        #        
+        #    else:
+        #        print(strin)
+        #        strin=""
+        #        print()
+        #        if len(queue)> 0:
+        #            queue.append(0)
+
+        #print("********end**********")
+        #root.update_positions(self.dt)
+
+        #s = ""
+        #s = root.draw_tree(s)
+        #print(s)
+
+#        for i in range(len(self.bodies)):
+#            b = self.bodies[i]
+#            b.force = np.array([0.0,0.0,0.0])
+#            root.update_force(b) 
+#            self.planets_vel[i] +=  b.force*self.dt
+#
+#        for i in range(len(self.bodies)):
+#            b = self.bodies[i]
+#            b.x += self.planets_vel[i][0] * self.dt
+#            b.y += self.planets_vel[i][1] * self.dt
+#            self.planets[i][0] = b.x
+#            self.planets[i][1] = b.y
 
 #        for i in range(len(self.planets)):
 #            p = self.planets[i] 
@@ -303,8 +342,8 @@ class Display:
             self.planets_vel += unit.sum(axis=1)*dt
             self.planets += self.planets_vel*dt
             for i in range(len(self.trails)):
-                self.bodies[i].x = self.planets[i][0]
-                self.bodies[i].y = self.planets[i][1]
+                self.bodies[i].pos = self.planets[i]
+                self.bodies[i].vel = self.planets_vel[i]
                 if len(self.trails[i])>10:
                     self.trails[i].pop(0)
                 self.trails[i].append(self.planets[i].tolist())
@@ -319,7 +358,7 @@ class Display:
         for i in range(len(self.planets)):
             p = self.planets[i]
             boddy = self.bodies[i]
-            x,y = boddy.x,boddy.y
+            x,y, _  =  boddy.pos
 #            x,y,_ = p
             if x!= np.nan and y!= np.nan:
                 toss = rd.randint(0,1)
@@ -458,7 +497,7 @@ class Display:
         x = self.origin[0] + mix/self.zoom
         y = self.origin[1] + miy/self.zoom
         surf = self.font.render(f"{int(x)},{int(y)}",True,(255,255,255),(30,0,40))
-        self.win.blit(surf,(mix+10,miy))
+        self.win.blit(surf,(mix+20,miy))
         self.win.blit(self.x_mark,(screen_width//2-8,screen_height//2-8),special_flags=py.BLEND_RGB_ADD)
    
     def spawn_process(self):
@@ -523,8 +562,9 @@ class Display:
         mass = sign*(self.mass_selected + rd.randint(1,10))
         self.append_planet(pos,vel,mass)
         self.trails.append([self.planets[-1]])
-        body = Body(x,y,mass)
-        body.id = len(self.bodies)
+
+        body = Body()
+        body.set(np.array(pos),np.array(vel,dtype=np.float32),mass,len(self.bodies))
         self.bodies.append(body)
  
    
