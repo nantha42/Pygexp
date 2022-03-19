@@ -7,6 +7,8 @@ import math
 from numpy import array as array
 from utils import *
 from compute_faster import *
+from barneshut import *
+
 py.init()
 screen_width,screen_height = 1500,700
 
@@ -49,7 +51,7 @@ class Display:
         self.G = 0.010
         self.mass_selected = 1
         self.dark = False
-        self.zoom = 1.0
+        self.zoom = 10.0
         self.camera = np.array([1.0,1.0])
         self.scroll_enabled = False
         self.scroll_start = np.array([screen_width/2,screen_height/2])
@@ -70,6 +72,8 @@ class Display:
         self.zoomed_in_point = None
         self.prev_zoom = 1
         self.graph_factor = 1.0
+        self.bodies = []
+        self.fast_compute= False
 
         pass
 
@@ -144,16 +148,16 @@ class Display:
                     self.mass_selected = 100000 
                 if event.key == py.K_c:
                     self.mass_selected = 10000000000
+                if event.key == py.K_f:
+                    self.fast_compute = not self.fast_compute
 
                 if event.key == py.K_o:
                     self.center = arr([0,0])
                 if event.key == py.K_LEFT:
                     self.sdt *= 0.1 
-                    print(self.sdt)
                 if event.key == py.K_RIGHT:
                     self.sdt *= 10 
                     self.sdt = min(0.1,self.sdt)
-                    print(self.sdt)
 
 
                 if event.key == py.K_d:
@@ -210,7 +214,6 @@ class Display:
             if event.type == py.MOUSEBUTTONUP:
                 if event.button == 1:
                     self.launch_enabled = False
-                    print(self.launch_vector)
                     x,y = self.launch_vector
                     self.planets_vel[-1] = arr([x,y,0])/self.zoom
                      
@@ -242,12 +245,40 @@ class Display:
             self.drag = arr([0.0,0.0])
     
     def compute_fast(self):
-        print("U: ",self.planets)
-        computer = Compute_fast(self.planets,self.planets_vel,self.planets_mass) 
-        computer.update() 
-        self.planets = computer.pos
-        self.planets_vel = computer.vel
-        self.planets_masses = computer.masses
+        root_quad = Quad(-5e5,-5e5,1e6)
+        root = Barneshut(root_quad)
+        timer = Timer("Tree") 
+        for b in self.bodies:
+            body = Body()
+            body.copy(b)
+            root.insert(body)
+
+        for i in range(len(self.bodies)):
+            b = self.bodies[i]
+            b.force = np.array([0.0,0.0,0.0])
+            root.update_force(b) 
+            self.planets_vel[i] +=  b.force*self.dt
+
+        for i in range(len(self.bodies)):
+            b = self.bodies[i]
+            b.x += self.planets_vel[i][0] * self.dt
+            b.y += self.planets_vel[i][1] * self.dt
+            self.planets[i][0] = b.x
+            self.planets[i][1] = b.y
+
+#        for i in range(len(self.planets)):
+#            p = self.planets[i] 
+#            v = self.planets_vel[i]
+#            m = self.planets_mass[i]
+#            body = Body(p[0],p[1],m)
+#            root.insert(body)
+#        timer.elapsed()
+            
+        #computer = Compute_fast(self.planets,self.planets_vel,self.planets_mass) 
+        #computer.update() 
+        #self.planets = computer.pos
+        #self.planets_vel = computer.vel
+        #self.planets_masses = computer.masses
 
 
     def compute_accurate(self):
@@ -273,6 +304,8 @@ class Display:
             self.planets_vel += unit.sum(axis=1)*dt
             self.planets += self.planets_vel*dt
             for i in range(len(self.trails)):
+                self.bodies[i].x = self.planets[i][0]
+                self.bodies[i].y = self.planets[i][1]
                 if len(self.trails[i])>10:
                     self.trails[i].pop(0)
                 self.trails[i].append(self.planets[i].tolist())
@@ -286,7 +319,9 @@ class Display:
         self.win.blit(self.bg,(0,0))
         for i in range(len(self.planets)):
             p = self.planets[i]
-            x,y,_ = p
+            boddy = self.bodies[i]
+            x,y = boddy.x,boddy.y
+#            x,y,_ = p
             if x!= np.nan and y!= np.nan:
                 toss = rd.randint(0,1)
                 converted_point = self.space_to_screen(arr([x,y]))
@@ -314,8 +349,12 @@ class Display:
                     py.draw.lines(self.win,WHITE,False,transformed,1)
 
         self.draw_texts()
+        htimer = Timer("hor")
         self.draw_horizontal_graph()
+#        htimer.elapsed()
+        vtimer = Timer("ver")
         self.draw_vertical_graph()
+#        vtimer.elapsed()
     
 
     def update_graph(self):
@@ -344,13 +383,11 @@ class Display:
         factor = 1
         while self.screen_dx(grid_height*factor) <= 10:
             factor*= 20 
-        print("drawing horizontal") 
         sys = []
         for i in range(start,int(ey),grid_height*factor): 
             sx,sy = self.space_to_screen(arr([0,i]))
             self.win.blit(self.graph_line_h,[0,sy],special_flags=py.BLEND_RGB_ADD)
             sys.append(sy)
-        print(sys)
 
 
     def draw_vertical_graph(self):
@@ -487,6 +524,9 @@ class Display:
         mass = sign*(self.mass_selected + rd.randint(1,10))
         self.append_planet(pos,vel,mass)
         self.trails.append([self.planets[-1]])
+        body = Body(x,y,mass)
+        body.id = len(self.bodies)
+        self.bodies.append(body)
  
    
     def append_planet(self,p,v,m=1):
@@ -533,14 +573,16 @@ class Display:
             self.draw()
             py.display.update()
             if not self.pause and not self.launch_enabled:
-#                self.compute_accurate()
-                self.compute_fast()
+                if self.fast_compute:
+                    self.compute_fast()
+                else:
+                    self.compute_accurate()
 
             nowtime = time.time()
             self.dt = 10*(nowtime - self.lasttime )
             self.lasttime = nowtime
             self.calculate_fps()
-            self.clock.tick(60)
+            self.clock.tick(120)
             self.index+=1
     
     def calculate_fps(self):

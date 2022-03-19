@@ -7,13 +7,22 @@ class Body:
         self.x = x
         self.y = y
         self.mass = mass
+        self.force = np.array([0.0,0.0])
+        self.id = -1 
 
-    def in(self,quad);
+
+    def copy(self,b):
+        self.x = b.x
+        self.y = b.y
+        self.mass= b.mass
+        self.id = b.id
+
+    def presentin(self,quad):
         xpres = False 
         ypres = False
-        if quad.x <= self.x  <= quad.x+quad.l:
+        if quad.sx <= self.x  <= quad.sx+quad.l:
             xpres = True
-        if quad.y <= self.y  <= quad.y+quad.l:
+        if quad.sy <= self.y  <= quad.sy+quad.l:
             ypres = True
         return xpres and ypres
     
@@ -52,6 +61,17 @@ class Quad:
             return self.SW()
         elif i==3:
             return self.SE()
+    
+    def get_correct_quad(self,x,y):
+        dx = x-self.sx
+        dy = y-self.sy
+        index = (dx//(self.l/2)) + 2*(dy//(self.l/2))
+        if 0 <= index <= 3: 
+            return int(index)
+        else:
+            print("impossible")
+            return -1
+        pass
 
     def NW(self):
         s = self.l//2
@@ -75,22 +95,82 @@ class Barneshut:
         self.body = Body()
         self.subhuts = [None,None,None,None]
         pass
+    
 
     def insert(self,b):
         """inserts a body"""
-        if self.body.isempty():
-            self.body = self.body.add(self.body,b)
-        else: 
-            for i in range(len(4)):
+        if self.body.isempty() and self.quad.contains(b.x,b.y):
+            copy_body = Body()
+            copy_body.copy(b)
+            self.body = copy_body
+        elif self.body.id==-1:
+            # if internal node
+            i = self.quad.get_correct_quad(b.x,b.y)
+            if i == -1: return
+            if 0 <= i <= 3: 
                 Q = self.quad.get_quad(i)
-                if b.in(Q):
-                    if self.subhuts[i] == None:
-                        self.subhuts[i] = Barneshut(Q)
-                        self.subhuts[i].insert(b)
-                    else:
-                        self.subhuts[i].insert(b)
-                        
-                    hut.insert(b) 
-                    break
+                if self.subhuts[i] == None:
+                    self.subhuts[i] = Barneshut(Q)
+                    self.subhuts[i].insert(b)
+                else:
+                    self.subhuts[i].insert(b)
+                self.body = self.body.add(b,self.body)
+        else: 
+            i = self.quad.get_correct_quad(b.x,b.y)
+            ci = self.quad.get_correct_quad(self.body.x,self.body.y)#current body id
+            if i == -1 or ci == -1: return
+            if 0 <= i <= 3: 
+                Q = self.quad.get_quad(i)
+                if self.subhuts[i] == None:
+                    self.subhuts[i] = Barneshut(Q)
+                    self.subhuts[i].insert(b)
+                else:
+                    self.subhuts[i].insert(b)
+
+            if 0 <= ci <= 3:
+                Q = self.quad.get_quad(ci)
+                if self.subhuts[ci] == None:
+                    self.subhuts[ci] = Barneshut(Q)
+                    self.subhuts[ci].insert(self.body)
+                else:
+                    self.subhuts[ci].insert(self.body)
+
+                self.body = self.body.add(b,self.body)
+            else:
+                print("not present")
+    
+    def update_force(self,b):
+        #self.body.id == -1 means it is a internal node
+        if self.body.id != -1 and b.id != self.body.id:
+            force = compute_gravity(b.x,b.y,b.mass,self.body.x,self.body.y,self.body.mass)
+            b.force += force
+            return 
+        
+        d = np.array([self.body.x - b.x,self.body.y - b.y] )
+        d = np.linalg.norm(d) 
+        if self.quad.l/d < 0.5:
+            force = compute_gravity(b.x,b.y,b.mass,self.body.x,self.body.y,self.body.mass)    
+            b.force += force
+            return
+        else:
+            for hut in self.subhuts:
+                if hut is not None:
+                    hut.update_force(b)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 

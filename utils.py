@@ -1,5 +1,6 @@
 import numpy as np
 import math
+import time
 
 def count_elements(x):
     ans = 1
@@ -35,5 +36,21 @@ def compute_gravity(p1,m1,p2,m2):
     f2 = m1/r**2
     return [f1,f2]
 
+def compute_gravity(x1,y1,m1,x2,y2,m2):
+    """returns a f1,f2 which are ndarray"""
+    v = np.array([x2-x1,y2-y1,0])
+    r = np.linalg.norm(v)
+    nv = v/r
+    f = nv*m2/(r**2)
+    print("mag: ",m2/(r**2))
+    return f
+    
 
 
+class Timer:
+    def __init__(self,name):
+        self.start = time.time()
+        self.name = name
+
+    def elapsed(self):
+        print(self.name + " Elapsed: ",time.time()-self.start)
