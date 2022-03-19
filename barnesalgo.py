@@ -8,7 +8,34 @@ def add_bodies(b1,b2):
     ret.set(com,None,tm,-1)
     return ret
  
+def compute_mass(root):
+    if root is None:
+        return 0
+    elif root.body.id != -1:
+        return root.body.mass
+    else:
+        root.body.mass = 0
+        for hut in root.subhuts:
+            root.body.mass += compute_mass(hut)
+        
+        return root.body.mass
 
+def compute_com(root):
+    if root is None:
+        return np.array([0.0,0.0,0.0])
+
+    elif root.body.id != -1:
+        return root.body.pos
+    else:
+        position = np.array([0.0,0.0,0.0])
+        tm = 0.0
+        for hut in root.subhuts:
+            if hut is not None:
+                position += compute_com(hut)*hut.body.mass
+                tm += hut.body.mass
+        root.pos = position/tm
+        return root.pos
+ 
 class Body:
     def __init__(self):
         self.pos =None 
@@ -67,11 +94,11 @@ class Quad:
         dpos = np.array(pos - self.start,dtype=np.float32)
         dpos = dpos/(self.l/2.0)
         try:
-            ind = int(dpos[0] + dpos[1]*2)
+            ind = int(int(dpos[0]) + int(dpos[1])*2)
             if 0 <= ind <= 3:
                 return ind
             else:
-                print("outside range of quad",ind)
+#                print("outside range of quad",ind)
                 return -1
         except:
             print(dpos)
@@ -138,7 +165,6 @@ class BarnesHut:
     
     def insert_into_quad(self,b):
         i = self.quad.get_correct_quad(b.pos) 
-        print("b:",b.pos)
         i = int(i)
         if i != -1:
             Q = self.quad.get_quad(int(i))
@@ -148,9 +174,10 @@ class BarnesHut:
             self.count = self.subhuts[i].insert(b) + 1
         else:
             print("insertion failed")
+            pass
 
     def update_force(self,b,G): 
-        if self.body!= -1 and b.id != self.body.id:
+        if self.body.id!= -1 and b.id != self.body.id:
             b.force += compute_gravity_vector(b.pos,b.mass,self.body.pos,self.body.mass,G)
             return
         d = np.linalg.norm(self.body.pos-b.pos) 
@@ -161,23 +188,24 @@ class BarnesHut:
         else:
             for hut in self.subhuts:
                 if hut is not None:
-                    hut.update_force(b)
+                    hut.update_force(b,G)
 
     def update_positions(self,dt):
         if self.body.id != -1:
             self.body.vel += self.body.force * dt 
             self.body.pos += self.body.vel* dt
-            print(self.body.id,"  ",self.body.pos)
         else:
             for hut in self.subhuts:
                 if hut is not None:
                     hut.update_positions(dt)
 
     def draw_tree(self,string):
-        
         string += str(self.body.id) + " "
         for hut in self.subhuts:
             if hut is not None:
                 string += hut.draw_tree(string)
         return string
+
+           
+
 

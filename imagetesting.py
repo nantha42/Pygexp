@@ -73,6 +73,8 @@ class Display:
         self.graph_factor = 1.0
         self.bodies = []
         self.fast_compute= False
+        self.old_root = None
+        self.show_quads = False
 
         pass
 
@@ -104,6 +106,10 @@ class Display:
         self.graph_line_h = py.Surface((screen_width,1)) 
         py.draw.line(self.graph_line_v,(10,10,10),[0,0],[0,screen_height],1)
         py.draw.line(self.graph_line_h,(10,10,10),[0,0],[screen_width,0],1)
+
+        self.com_surface = py.Surface((r,r))
+        py.draw.circle(self.com_surface,(255,0,0),(r//2,r//2),sz,sz)
+
 
             
     def eventhandler(self):
@@ -149,6 +155,8 @@ class Display:
                     self.mass_selected = 10000000000
                 if event.key == py.K_f:
                     self.fast_compute = not self.fast_compute
+                if event.key == py.K_s:
+                    self.show_quads = not self.show_quads
 
                 if event.key == py.K_o:
                     self.center = arr([0,0])
@@ -156,7 +164,7 @@ class Display:
                     self.sdt *= 0.1 
                 if event.key == py.K_RIGHT:
                     self.sdt *= 10 
-                    self.sdt = min(0.1,self.sdt)
+                    #self.sdt = min(0.1,self.sdt)
 
 
                 if event.key == py.K_d:
@@ -195,6 +203,7 @@ class Display:
                         self.zoom *= 1.2 
                         self.recalculate_surfaces()
                         self.update_graph()
+
                     elif(event.button >= 4 and event.button):
                         self.prev_zoom = self.zoom
                         #self.zoom *= .9 
@@ -215,6 +224,8 @@ class Display:
                     self.launch_enabled = False
                     x,y = self.launch_vector
                     self.planets_vel[-1] = arr([x,y,0])/self.zoom
+                    self.construct_galaxy(self.planets[-1],self.planets_vel[-1])
+                    self.bodies[-1].vel = self.planets_vel[-1]
                      
                 if event.button == 3:
                     self.scroll_enabled = False
@@ -244,28 +255,28 @@ class Display:
             self.drag = arr([0.0,0.0])
     
     def compute_fast(self):
-        root_quad = Quad(np.array([-5e1,-5e1, 0]),1e2)
+        root_quad = Quad(np.array([-5e8,-5e8, 0]),1e9)
         root = BarnesHut(root_quad)
-        timer = Timer("Tree") 
         #construct tree
         max_height = 0
         for b in self.bodies:
             root.insert(b)
             max_height = max(root.count,max_height)
             root.count = 0
-#        print("Tree height:",max_height)
+        self.old_root = root
 
+        compute_mass(root)
+        compute_com(root)
+        
         #calculate forces
         for b in self.bodies:
             b.reset_force()
             root.update_force(b,self.G)
 
+        #update position and velocities
         for b in self.bodies:
-            print(b.id, " ",b.quad_start)
-        
-        #for b in self.bodies:
-        #    b.vel += b.force * self.dt
-        #    b.pos += b.vel * self.dt
+            b.vel += b.force * self.dt
+            b.pos += b.vel * self.dt
         #print("********drawing**********")
         #queue = [root,0]
         #strin = ""
@@ -357,9 +368,8 @@ class Display:
         self.win.blit(self.bg,(0,0))
         for i in range(len(self.planets)):
             p = self.planets[i]
-            boddy = self.bodies[i]
-            x,y, _  =  boddy.pos
-#            x,y,_ = p
+#            x,y, _  =  boddy.pos
+            x,y,_ = p
             if x!= np.nan and y!= np.nan:
                 toss = rd.randint(0,1)
                 converted_point = self.space_to_screen(arr([x,y]))
@@ -392,6 +402,9 @@ class Display:
 #        htimer.elapsed()
         vtimer = Timer("ver")
         self.draw_vertical_graph()
+        if self.compute_fast:
+            if self.show_quads:
+                self.draw_quads(self.old_root)
 #        vtimer.elapsed()
     
 
@@ -410,6 +423,33 @@ class Display:
     def screen_dx(self, x):
         return x*self.zoom
         pass
+    
+
+    def draw_quads(self,root):
+        if root is not None:
+            Q = root.quad
+            line_start = self.space_to_screen(Q.start[:2])
+            hor_end = Q.start 
+            hor_end[0] += Q.l
+            ver_end = Q.start
+            ver_end[1] += Q.l
+            line_hor = self.space_to_screen(hor_end)
+            line_ver = self.space_to_screen(ver_end)
+            w = line_hor[0] - line_start[0]
+            h = line_ver[1] - line_start[1]
+            py.draw.rect(self.win,(250,250,250),[line_start[0],line_start[1],w,h],1)
+            for hut in root.subhuts:
+                self.draw_quads(hut) 
+
+            if root.body.id == -1: 
+                poss = root.body.pos
+                poss = self.space_to_screen(poss)
+                x,y = poss
+                x = int(x)
+                y = int(y)
+                x-=self.rad//2
+                y-=self.rad//2
+                self.win.blit(self.com_surface,[x,y],special_flags=py.BLEND_RGB_ADD)
 
     def draw_horizontal_graph(self):
         x,y,_ = self.screen_to_space(arr([0,0])) 
@@ -455,7 +495,9 @@ class Display:
             x,y,_ = p 
             if x!= np.nan and y != np.nan: 
                 toss = rd.randint(0,1)
-                x,y = (x-self.origin[0])*self.zoom, (y-self.origin[1])*self.zoom
+#                x,y = (x-self.origin[0])*self.zoom, (y-self.origin[1])*self.zoom
+                if x < 0 or x > screen_width or y < 0 or y > screen_height:
+                    continue
                 #mx,my = self.scroll_start
                 #x,y = (screen_width/2)*(1-self.zoom) + x*self.zoom,(screen_height/2)*(1-self.zoom) + y*self.zoom
                 #x,y = x+(-self.scroll_start[0]),y+(-self.scroll_start[1])
@@ -517,11 +559,16 @@ class Display:
             self.append_planet(p1,vel,mass)
     
     def space_to_screen(self,points):
+        if points is None:return np.array([0,0])
         if len(points.shape) == 3: 
             screen_points = (points-self.origin)*self.zoom
             return screen_point
         else:
-            x,y = points
+            x,y = 0,0
+            if len(points) == 2:
+                x,y = points
+            else:
+                x,y,_ = points
             screen_point = [(x-self.origin[0])*self.zoom, (y-self.origin[1])*self.zoom]
             return screen_point
             
@@ -585,6 +632,33 @@ class Display:
         stats = {"pos":self.planets,"vel":self.planets_vel,"mass":self.planets_mass} 
         with open('saved/mypickle.pickle', 'wb') as f:
             pickle.dump(stats, f)
+    
+    def construct_galaxy(self,px,vx):
+        pos = self.planets.tolist()
+        vel = self.planets_vel.tolist()
+        mass = self.planets_mass.tolist()
+
+        first_point = px.tolist()
+        n_particles = 250
+        pos.append(np.array(first_point))
+        vel.append(np.array(first_point))
+        mass.append(1000000)
+        self.trails.append([first_point])
+        for i in range(n_particles):
+            angle = np.random.randint(0,360) 
+            rad = np.deg2rad(angle)
+            vrad = np.deg2rad(angle-90)
+            radius = np.random.randint(0,3000)
+            p = np.array([np.cos(rad)*radius,radius *np.sin(rad),0.0])+px
+            speed = 30 
+            vdir = np.array([np.cos(vrad), np.sin(vrad), 0.0])*speed + vx
+            pos.append(p)
+            vel.append(vdir)
+            mass.append(10000)
+            self.trails.append([p])
+        self.planets = np.array(pos)
+        self.planets_vel  = np.array(vel)
+        self.planets_mass= np.array(mass)
 
     def load_particles(self):
         with open("saved/mypickle.pickle",'rb') as f:
@@ -613,9 +687,13 @@ class Display:
             py.display.update()
             if not self.pause and not self.launch_enabled:
                 if self.fast_compute:
+#                    timer = Timer("tree")
                     self.compute_fast()
+#                    timer.elapsed()
                 else:
+#                    timer = Timer("array")
                     self.compute_accurate()
+#                    timer.elapsed()
 
             nowtime = time.time()
             self.dt = 10*(nowtime - self.lasttime )
