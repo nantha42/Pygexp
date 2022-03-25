@@ -97,7 +97,6 @@ class Barneshut:
         self.subhuts = [None,None,None,None]
         pass
     
-
     def insert(self,b):
         """inserts a body"""
         if self.body.isempty() and self.quad.contains(b.x,b.y):
@@ -157,21 +156,5 @@ class Barneshut:
             for hut in self.subhuts:
                 if hut is not None:
                     hut.update_force(b)
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 

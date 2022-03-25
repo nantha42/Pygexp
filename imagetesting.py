@@ -8,6 +8,7 @@ from numpy import array as array
 from utils import *
 from compute_faster import *
 from barnesalgo import *
+from config import *
 
 py.init()
 screen_width,screen_height = 1500,700
@@ -33,7 +34,7 @@ class Display:
         self.sdt = self.dt
 
         self.bg = py.Surface((screen_width,screen_height))
-        self.bg.fill((30,0,40))
+        self.bg.fill((0,0,0))
         self.font = py.font.Font("freesansbold.ttf",15)
         self.lasttime = time.time() 
         self.planets = np.array([])
@@ -50,7 +51,7 @@ class Display:
         self.G = 0.010
         self.mass_selected = 1
         self.dark = False
-        self.zoom = 10.0
+        self.zoom = initial_zooming_factor
         self.camera = np.array([1.0,1.0])
         self.scroll_enabled = False
         self.scroll_start = np.array([screen_width/2,screen_height/2])
@@ -75,12 +76,13 @@ class Display:
         self.fast_compute= False
         self.old_root = None
         self.show_quads = False
+        self.enabled_galaxy_construction = False
 
         pass
 
     def create_surfaces(self):
-        r = int(max(min(64*self.zoom,512),64))
-        sz = int(max(min(self.zoom,64),1))
+        r = int(max(min(4*self.zoom,64),64))
+        sz = int(max(min(self.zoom,8),1))
         self.rad = r
         self.dot_surface = py.Surface((r,r)) 
         self.dot_surface1 = py.Surface((r,r))
@@ -90,7 +92,7 @@ class Display:
         py.draw.circle(self.dot_surface,(1,1,1),(r//2,r//2),r//2,r//2)
         py.draw.circle(self.dot_surface,(255,215,0),(r//2,r//2),sz,sz)
         
-        py.draw.circle(self.dot_surface1,(1,1,1),(r//2,r//2),r//2,r//2)
+        py.draw.circle(self.dot_surface1,(3,3,3),(r//2,r//2),r//2,r//2)
         py.draw.circle(self.dot_surface1,(225,220,225),(r//2,r//2),sz,sz)
 
 
@@ -104,8 +106,8 @@ class Display:
 
         self.graph_line_v = py.Surface((1,screen_height))
         self.graph_line_h = py.Surface((screen_width,1)) 
-        py.draw.line(self.graph_line_v,(10,10,10),[0,0],[0,screen_height],1)
-        py.draw.line(self.graph_line_h,(10,10,10),[0,0],[screen_width,0],1)
+        py.draw.line(self.graph_line_v,(30,30,30),[0,0],[0,screen_height],1)
+        py.draw.line(self.graph_line_h,(30,30,30),[0,0],[screen_width,0],1)
 
         self.com_surface = py.Surface((r,r))
         py.draw.circle(self.com_surface,(255,0,0),(r//2,r//2),sz,sz)
@@ -157,6 +159,13 @@ class Display:
                     self.fast_compute = not self.fast_compute
                 if event.key == py.K_s:
                     self.show_quads = not self.show_quads
+                if event.key == py.K_g:
+                    self.enabled_galaxy_construction = not self.enabled_galaxy_construction
+                if event.key == py.K_r:
+                    self.planets = np.array([])
+                    self.planets_vel = np.array([])
+                    self.planets_mass= np.array([])
+                    self.trails= []
 
                 if event.key == py.K_o:
                     self.center = arr([0,0])
@@ -224,7 +233,8 @@ class Display:
                     self.launch_enabled = False
                     x,y = self.launch_vector
                     self.planets_vel[-1] = arr([x,y,0])/self.zoom
-                    self.construct_galaxy(self.planets[-1],self.planets_vel[-1])
+                    if self.enabled_galaxy_construction:
+                        self.construct_galaxy(self.planets[-1],self.planets_vel[-1])
                     self.bodies[-1].vel = self.planets_vel[-1]
                      
                 if event.button == 3:
@@ -333,6 +343,9 @@ class Display:
     def compute_accurate(self):
         dt = self.sdt
         r = -self.planets.reshape([-1,1,3]) + self.planets.reshape([1,-1,3])
+        triang = np.triu(r,1)
+        triang[triang<=10] = 0
+        
         normed = np.linalg.norm(r,axis=2)
         squared = (normed*normed)
         quaded = (normed*normed*normed*normed)
@@ -353,19 +366,17 @@ class Display:
             self.planets_vel += unit.sum(axis=1)*dt
             self.planets += self.planets_vel*dt
             for i in range(len(self.trails)):
-                self.bodies[i].pos = self.planets[i]
-                self.bodies[i].vel = self.planets_vel[i]
-                if len(self.trails[i])>10:
+                if len(self.trails[i])>3:
                     self.trails[i].pop(0)
                 self.trails[i].append(self.planets[i].tolist())
             #self.filterstore = self.planets
-            #time.sleep(1)
             pass
         except:
             pass
     
     def draw(self):
         self.win.blit(self.bg,(0,0))
+#        pxarray = py.PixelArray(self.win)
         for i in range(len(self.planets)):
             p = self.planets[i]
 #            x,y, _  =  boddy.pos
@@ -375,14 +386,20 @@ class Display:
                 converted_point = self.space_to_screen(arr([x,y]))
                 x,y = converted_point
                 if i == self.selected_planet:
-                    self.win.blit(self.surfaces["star_control"],[x,y],special_flag=py.BLEND_RGB_ADD)   
+                    self.win.blit(self.surfaces["star_control"],[x,y],special_flag=py.BLEND_RGB_ADD) 
                 else:
                     x -= self.rad//2
                     y -= self.rad//2
+                    x = int(x)
+                    y = int(y)
+#                    if not (0 < x < len(pxarray) and 0 < y < len(pxarray[0])):
+#                        continue
                     if toss == 1:
                         self.win.blit(self.surfaces["star"],[x,y],special_flags=py.BLEND_RGB_ADD)                     
+#                        pxarray[x][y] = (255,255,255)
                     else:
                         self.win.blit(self.surfaces["starG"],[x,y],special_flags=py.BLEND_RGB_ADD) 
+#                        pxarray[x][y] = (205,200,80)
                 if self.launch_enabled and i == len(self.planets)-1:
                     ep = [x+self.rad//2,y+self.rad//2] + self.launch_vector
                     py.draw.line(self.win,WHITE,[x+self.rad//2,y+self.rad//2],ep,1)
@@ -395,12 +412,12 @@ class Display:
                     transformed.append([x,y])
                 if len(transformed)>1:
                     py.draw.lines(self.win,WHITE,False,transformed,1)
+                    pass
 
+#        del pxarray
         self.draw_texts()
-        htimer = Timer("hor")
         self.draw_horizontal_graph()
 #        htimer.elapsed()
-        vtimer = Timer("ver")
         self.draw_vertical_graph()
         if self.compute_fast:
             if self.show_quads:
@@ -557,7 +574,8 @@ class Display:
             p1 += center
             mass = np.random.randint(1,1000)
             self.append_planet(p1,vel,mass)
-    
+
+
     def space_to_screen(self,points):
         if points is None:return np.array([0,0])
         if len(points.shape) == 3: 
@@ -639,23 +657,44 @@ class Display:
         mass = self.planets_mass.tolist()
 
         first_point = px.tolist()
-        n_particles = 250
-        pos.append(np.array(first_point))
-        vel.append(np.array(first_point))
-        mass.append(1000000)
-        self.trails.append([first_point])
-        for i in range(n_particles):
-            angle = np.random.randint(0,360) 
+        n_particles = N 
+        mm = particles_mass 
+        speed = particle_speed 
+        first_particle_mass = first_mass 
+        if len(pos) > 0:
+            pos[-1] = np.array(px)
+            vel[-1] = np.array(vx)
+            mass[-1] = first_particle_mass  
+        else:
+            pos.append(np.array(first_point))
+            vel.append(np.array(first_point))
+            mass.append(first_particle_mass)
+            self.trails.append([first_point])
+
+        for i in range(n_particles//2):
+            angle = np.random.randint(-angle_sides,angle_sides) 
             rad = np.deg2rad(angle)
-            vrad = np.deg2rad(angle-90)
-            radius = np.random.randint(0,3000)
-            p = np.array([np.cos(rad)*radius,radius *np.sin(rad),0.0])+px
-            speed = 30 
+            vrad = np.deg2rad(angle+vel_angle)
+            radius = np.random.randint(0,gal_radius)
+            p = np.array([np.cos(rad)*radius,radius *np.sin(rad),np.random.randint(-150,150)])+px
             vdir = np.array([np.cos(vrad), np.sin(vrad), 0.0])*speed + vx
             pos.append(p)
             vel.append(vdir)
-            mass.append(10000)
+            mass.append(mm)
             self.trails.append([p])
+
+        for i in range(n_particles//2):
+            angle = np.random.randint(180-angle_sides,180+angle_sides) 
+            rad = np.deg2rad(angle)
+            vrad = np.deg2rad(angle+vel_angle)
+            radius = np.random.randint(0,gal_radius)
+            p = np.array([np.cos(rad)*radius,radius *np.sin(rad),np.random.randint(-150,150)])+px
+            vdir = np.array([np.cos(vrad), np.sin(vrad), 0.0])*speed + vx
+            pos.append(p)
+            vel.append(vdir)
+            mass.append(mm)
+            self.trails.append([p])
+
         self.planets = np.array(pos)
         self.planets_vel  = np.array(vel)
         self.planets_mass= np.array(mass)
@@ -687,13 +726,9 @@ class Display:
             py.display.update()
             if not self.pause and not self.launch_enabled:
                 if self.fast_compute:
-#                    timer = Timer("tree")
                     self.compute_fast()
-#                    timer.elapsed()
                 else:
-#                    timer = Timer("array")
                     self.compute_accurate()
-#                    timer.elapsed()
 
             nowtime = time.time()
             self.dt = 10*(nowtime - self.lasttime )
