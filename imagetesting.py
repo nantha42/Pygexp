@@ -6,7 +6,6 @@ import numpy as np
 import math
 from numpy import array as array
 from utils import *
-from compute_faster import *
 from barnesalgo import *
 from config import *
 
@@ -196,7 +195,8 @@ class Display:
 
             if event.type == py.MOUSEBUTTONDOWN:
                 if(event.button == 1):
-                    self.spawn_process1()
+                    if not self.enabled_galaxy_construction:
+                        self.spawn_process1()
                     self.launch_enabled = True
                     self.launch_point= arr(py.mouse.get_pos())
 
@@ -232,9 +232,11 @@ class Display:
                 if event.button == 1:
                     self.launch_enabled = False
                     x,y = self.launch_vector
-                    self.planets_vel[-1] = arr([x,y,0])/self.zoom
+#                    self.planets_vel[-1] = arr([x,y,0])/self.zoom
+                    vel = arr([x,y,0])/self.zoom
+                    p,_ = self.get_mouse_space_coord() 
                     if self.enabled_galaxy_construction:
-                        self.construct_galaxy(self.planets[-1],self.planets_vel[-1])
+                        self.construct_galaxy(np.array(p),vel)
                     self.bodies[-1].vel = self.planets_vel[-1]
                      
                 if event.button == 3:
@@ -265,28 +267,43 @@ class Display:
             self.drag = arr([0.0,0.0])
     
     def compute_fast(self):
-        root_quad = Quad(np.array([-5e8,-5e8, 0]),1e9)
+        root_quad = Quad(np.array(quad_pos),quad_len)
         root = BarnesHut(root_quad)
         #construct tree
         max_height = 0
+        ii = 0
+        active_list = []
+        Ttree = Timer("Root construction: ") 
         for b in self.bodies:
-            root.insert(b)
-            max_height = max(root.count,max_height)
+            if root.quad.contain(b.pos):
+                root.insert(b)
+                max_height = max(root.count,max_height)
+                active_list.append(b)
+#            print("inserted ",b.id,max_height)
+            else:
+                b.activated = False
             root.count = 0
+        Ttree.elapsed()
         self.old_root = root
+        self.bodies= active_list
 
+        TMass =Timer("Mass and COM: ")
         compute_mass(root)
         compute_com(root)
-        
+        TMass.elapsed()
+       
+        TForce = Timer("Force :") 
         #calculate forces
         for b in self.bodies:
             b.reset_force()
             root.update_force(b,self.G)
-
+        TForce.elapsed()
+        Tupdate = Timer("Update: ")
         #update position and velocities
         for b in self.bodies:
             b.vel += b.force * self.dt
             b.pos += b.vel * self.dt
+        Tupdate.elapsed()
         #print("********drawing**********")
         #queue = [root,0]
         #strin = ""
@@ -377,10 +394,14 @@ class Display:
     def draw(self):
         self.win.blit(self.bg,(0,0))
 #        pxarray = py.PixelArray(self.win)
-        for i in range(len(self.planets)):
-            p = self.planets[i]
-#            x,y, _  =  boddy.pos
-            x,y,_ = p
+        n_bodies = len(self.planets) if not self.fast_compute else len(self.bodies) 
+        for i in range(n_bodies):
+            if not self.fast_compute:
+                p = self.planets[i]
+                x,y,_ = p
+            else:
+                boddy = self.bodies[i]
+                x,y, _  =  boddy.pos
             if x!= np.nan and y!= np.nan:
                 toss = rd.randint(0,1)
                 converted_point = self.space_to_screen(arr([x,y]))
@@ -507,7 +528,8 @@ class Display:
         self.win.blit(self.bg,(0,0))
 #       for p in plotted:
         index = 0 
-        for i in range(len(self.planets)):
+        n_bodies = len(self.planets) if not self.enabled_galaxy_construction else len(self.bodies) 
+        for i in range(n_bodies):
             p = self.planets[i]
             x,y,_ = p 
             if x!= np.nan and y != np.nan: 
@@ -614,8 +636,7 @@ class Display:
         #oy = cy - my/self.zoom
         self.origin = np.array([ox,oy],dtype=np.float32) + self.center_displacement
         
-
-    def spawn_process1(self):
+    def get_mouse_space_coord(self): 
         dx,dy = py.mouse.get_pos()
         #dx-=self.rad//2
         #dy-=self.rad//2
@@ -623,6 +644,10 @@ class Display:
         x,y = self.origin[0]+dx,self.origin[1] + dy
         pos = [x,y,rd.randint(-10,10)]
         vel = [0,0,0] 
+        return pos,vel
+
+    def spawn_process1(self):
+        pos,vel = self.get_mouse_space_coord()
         sign = -1 if self.dark else 1
         mass = sign*(self.mass_selected + rd.randint(1,10))
         self.spawn_particle(pos,vel,mass)
@@ -665,9 +690,9 @@ class Display:
         speed = particle_speed 
         first_particle_mass = first_mass 
         if len(pos) > 0:
-            pos[-1] = np.array(px)
-            vel[-1] = np.array(vx)
-            mass[-1] = first_particle_mass  
+            #pos[-1] = np.array(px)
+            #vel[-1] = np.array(vx)
+            #mass[-1] = first_particle_mass  
             self.spawn_particle(first_point,vx,first_particle_mass)
         else:
             self.spawn_particle(first_point,vx,first_particle_mass)
@@ -719,7 +744,9 @@ class Display:
                 if self.fast_compute:
                     self.compute_fast()
                 else:
+                    Tacc = Timer("Accurate: ")
                     self.compute_accurate()
+                    Tacc.elapsed()
 
             nowtime = time.time()
             self.dt = 10*(nowtime - self.lasttime )

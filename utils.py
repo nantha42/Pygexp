@@ -1,6 +1,18 @@
 import numpy as np
 import math
 import time
+import logging
+logging.basicConfig(filename="logoutput.log",level=logging.INFO)
+print_enabled = False
+
+def printt(*args):
+    if print_enabled:
+        sti =""
+        for arg in args:
+            sti += arg
+        print(sti)
+    pass
+            
 
 def count_elements(x):
     ans = 1
@@ -9,7 +21,7 @@ def count_elements(x):
     return ans 
 
 def ptrin(x):
-    print(x)
+    printt(x)
     time.sleep(1)
 
 def norm(x):
@@ -33,7 +45,7 @@ def compute_gravity_vector(p1,m1,p2,m2,G):
     """returns a f1,f2 which are ndarray"""
     r = np.linalg.norm(p2-p1)
     unit_vec = (p2-p1)/np.linalg.norm(p2-p1)
-    f1 = m2/(r**2+1)
+    f1 = m2*m1/(r+1)**2
     return f1*unit_vec
 
 def compute_gravity(x1,y1,m1,x2,y2,m2):
@@ -42,7 +54,7 @@ def compute_gravity(x1,y1,m1,x2,y2,m2):
     r = np.linalg.norm(v)
     nv = v/r
     f = nv*m2/(r**2)
-    print("mag: ",m2/(r**2))
+    printt("mag: ",m2/(r**2))
     return f
     
 
@@ -53,4 +65,4 @@ class Timer:
         self.name = name
 
     def elapsed(self):
-        print(self.name + " Elapsed: ",time.time()-self.start)
+        printt(self.name + " Elapsed: ",time.time()-self.start)

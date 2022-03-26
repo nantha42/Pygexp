@@ -1,10 +1,11 @@
 from utils import *
 import time 
+from config import *
 
 def add_bodies(b1,b2):
     tm = b1.mass + b2.mass
-    com = (b1.pos*b1.mass + b2.pos*b2.mass)/tm
     ret = Body()
+    com = np.array([0.0,0.0,0.0])
     ret.set(com,None,tm,-1)
     return ret
  
@@ -44,6 +45,7 @@ class Body:
         self.id =-1
         self.force = np.array([0.0,0.0,0.0]) 
         self.quad_start = None
+        self.activated = True
 
     def reset_force(self):
         self.force = np.array([0.0,0.0,0.0]) 
@@ -92,16 +94,17 @@ class Quad:
 
     def get_correct_quad(self,pos):
         dpos = np.array(pos - self.start,dtype=np.float32)
-        dpos = dpos/(self.l/2.0)
+        ddpos = dpos/(self.l/2.0)
+#        print("dividng: ",dpos,self.l/2.0,ddpos)
         try:
-            ind = int(int(dpos[0]) + int(dpos[1])*2)
+            ind = int(int(ddpos[0]) + int(ddpos[1])*2)
             if 0 <= ind <= 3:
                 return ind
             else:
-#                print("outside range of quad",ind)
+#                print("outside range of quad",ind,pos,self.start)
                 return -1
         except:
-            print(dpos)
+            print("Exception outside range of quad",pos,self.start,ddpos,self.l/2.0)
             return -1
 
  
@@ -134,7 +137,7 @@ class BarnesHut:
         self.quad = quad 
         self.body = Body()
         self.subhuts = [None,None,None,None]
-        self.theta = 0.5
+        self.theta = theta
         self.count = 0
         pass
  
@@ -173,7 +176,7 @@ class BarnesHut:
                 self.subhuts[i].count = self.count
             self.count = self.subhuts[i].insert(b) + 1
         else:
-            print("insertion failed")
+            exit()
             pass
 
     def update_force(self,b,G): 
@@ -205,7 +208,5 @@ class BarnesHut:
             if hut is not None:
                 string += hut.draw_tree(string)
         return string
-
-           
 
 
