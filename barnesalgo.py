@@ -101,7 +101,7 @@ class Quad:
             if 0 <= ind <= 3:
                 return ind
             else:
-#                print("outside range of quad",ind,pos,self.start)
+                print("outside range of quad",ind,pos,self.start)
                 return -1
         except:
             print("Exception outside range of quad",pos,self.start,ddpos,self.l/2.0)
@@ -143,7 +143,6 @@ class BarnesHut:
  
 
     def insert(self,b):
-        self.count+=1
         """should not pass an copied object"""
         if self.body.isempty():
             """empty hut node"""
@@ -154,7 +153,8 @@ class BarnesHut:
             """internal node, just add with current body and insert
             into appropriate sub huts"""
             self.body = add_bodies(self.body,b)
-            self.insert_into_quad(b)
+            x = self.insert_into_quad(b)
+            self.count = x+1 
             
         else:
             """leaf node,should be handle with care"""
@@ -162,8 +162,9 @@ class BarnesHut:
             current_body = self.body
             self.body = new_body
 
-            self.insert_into_quad(b)
-            self.insert_into_quad(current_body)
+            u1 = self.insert_into_quad(b)
+            u2 = self.insert_into_quad(current_body)
+            self.count = max(u1,u2) + 1
         return self.count 
     
     def insert_into_quad(self,b):
@@ -173,8 +174,8 @@ class BarnesHut:
             Q = self.quad.get_quad(int(i))
             if self.subhuts[i] is None:
                 self.subhuts[i] = BarnesHut(Q)
-                self.subhuts[i].count = self.count
-            self.count = self.subhuts[i].insert(b) + 1
+                self.subhuts[i].count = 0 
+            return self.subhuts[i].insert(b) 
         else:
             exit()
             pass

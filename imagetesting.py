@@ -155,7 +155,8 @@ class Display:
                 if event.key == py.K_c:
                     self.mass_selected = 10000000000
                 if event.key == py.K_f:
-                    self.fast_compute = not self.fast_compute
+#                    self.fast_compute = not self.fast_compute
+                    pass
                 if event.key == py.K_s:
                     self.show_quads = not self.show_quads
                 if event.key == py.K_g:
@@ -282,28 +283,30 @@ class Display:
 #            print("inserted ",b.id,max_height)
             else:
                 b.activated = False
+            printt("Level :",root.count)
             root.count = 0
-        Ttree.elapsed()
+#        Ttree.elapsed()
+        printt("*****************")
         self.old_root = root
         self.bodies= active_list
 
         TMass =Timer("Mass and COM: ")
         compute_mass(root)
         compute_com(root)
-        TMass.elapsed()
+#        TMass.elapsed()
        
         TForce = Timer("Force :") 
         #calculate forces
         for b in self.bodies:
             b.reset_force()
             root.update_force(b,self.G)
-        TForce.elapsed()
+#        TForce.elapsed()
         Tupdate = Timer("Update: ")
         #update position and velocities
         for b in self.bodies:
             b.vel += b.force * self.dt
             b.pos += b.vel * self.dt
-        Tupdate.elapsed()
+#        Tupdate.elapsed()
         #print("********drawing**********")
         #queue = [root,0]
         #strin = ""

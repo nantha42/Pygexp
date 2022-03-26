@@ -3,13 +3,13 @@ import math
 import time
 import logging
 logging.basicConfig(filename="logoutput.log",level=logging.INFO)
-print_enabled = False
+print_enabled = True 
 
 def printt(*args):
     if print_enabled:
         sti =""
         for arg in args:
-            sti += arg
+            sti += str(arg)+" "
         print(sti)
     pass
             
