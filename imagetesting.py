@@ -625,13 +625,17 @@ class Display:
         vel = [0,0,0] 
         sign = -1 if self.dark else 1
         mass = sign*(self.mass_selected + rd.randint(1,10))
+        self.spawn_particle(pos,vel,mass)
+
+    def spawn_particle(self,pos,vel,mass):
         self.append_planet(pos,vel,mass)
         self.trails.append([self.planets[-1]])
 
         body = Body()
         body.set(np.array(pos),np.array(vel,dtype=np.float32),mass,len(self.bodies))
         self.bodies.append(body)
- 
+
+
    
     def append_planet(self,p,v,m=1):
         self.planets = self.planets.tolist()
@@ -736,7 +740,11 @@ class Display:
             self.calculate_fps()
             self.clock.tick(120)
             self.index+=1
-    
+
+    def particles_sync(self):
+        """Syncs the particles for different algorithms"""
+           
+
     def calculate_fps(self):
         if self.fps_count ==200:
             self.fps_count = 1
