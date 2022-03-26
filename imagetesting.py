@@ -630,7 +630,6 @@ class Display:
     def spawn_particle(self,pos,vel,mass):
         self.append_planet(pos,vel,mass)
         self.trails.append([self.planets[-1]])
-
         body = Body()
         body.set(np.array(pos),np.array(vel,dtype=np.float32),mass,len(self.bodies))
         self.bodies.append(body)
@@ -669,11 +668,9 @@ class Display:
             pos[-1] = np.array(px)
             vel[-1] = np.array(vx)
             mass[-1] = first_particle_mass  
+            self.spawn_particle(first_point,vx,first_particle_mass)
         else:
-            pos.append(np.array(first_point))
-            vel.append(np.array(first_point))
-            mass.append(first_particle_mass)
-            self.trails.append([first_point])
+            self.spawn_particle(first_point,vx,first_particle_mass)
 
         for i in range(n_particles//2):
             angle = np.random.randint(-angle_sides,angle_sides) 
@@ -682,10 +679,7 @@ class Display:
             radius = np.random.randint(0,gal_radius)
             p = np.array([np.cos(rad)*radius,radius *np.sin(rad),np.random.randint(-150,150)])+px
             vdir = np.array([np.cos(vrad), np.sin(vrad), 0.0])*speed + vx
-            pos.append(p)
-            vel.append(vdir)
-            mass.append(mm)
-            self.trails.append([p])
+            self.spawn_particle(p,vdir,mm)
 
         for i in range(n_particles//2):
             angle = np.random.randint(180-angle_sides,180+angle_sides) 
@@ -694,14 +688,7 @@ class Display:
             radius = np.random.randint(0,gal_radius)
             p = np.array([np.cos(rad)*radius,radius *np.sin(rad),np.random.randint(-150,150)])+px
             vdir = np.array([np.cos(vrad), np.sin(vrad), 0.0])*speed + vx
-            pos.append(p)
-            vel.append(vdir)
-            mass.append(mm)
-            self.trails.append([p])
-
-        self.planets = np.array(pos)
-        self.planets_vel  = np.array(vel)
-        self.planets_mass= np.array(mass)
+            self.spawn_particle(p,vdir,mm)
 
     def load_particles(self):
         with open("saved/mypickle.pickle",'rb') as f:

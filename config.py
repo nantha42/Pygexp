@@ -34,9 +34,9 @@ particles_mass = 100
 gal_radius = 2000
 #
 ##gyroscope like structure
-N = 250
-first_mass = 10000000
-angle_sides = 10 #
-vel_angle = 45 
-particle_speed = 200
-particles_mass = 100
+#N = 250
+#first_mass = 10000000
+#angle_sides = 10 #
+#vel_angle = 45 
+#particle_speed = 200
+#particles_mass = 100
