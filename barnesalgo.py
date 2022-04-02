@@ -5,7 +5,7 @@ from config import *
 def add_bodies(b1,b2):
     tm = b1.mass + b2.mass
     ret = Body()
-    com = np.array([0.0,0.0,0.0])
+    com = array([0.0,0.0,0.0])
     ret.set(com,None,tm,-1)
     return ret
  
@@ -23,12 +23,12 @@ def compute_mass(root):
 
 def compute_com(root):
     if root is None:
-        return np.array([0.0,0.0,0.0])
+        return array([0.0,0.0,0.0])
 
     elif root.body.id != -1:
         return root.body.pos
     else:
-        position = np.array([0.0,0.0,0.0])
+        position = array([0.0,0.0,0.0])
         tm = 0.0
         for hut in root.subhuts:
             if hut is not None:
@@ -40,15 +40,15 @@ def compute_com(root):
 class Body:
     def __init__(self):
         self.pos =None 
-        self.vel = np.array([0.0,0.0,0.0])
+        self.vel = array([0.0,0.0,0.0])
         self.mass = 0.0
         self.id =-1
-        self.force = np.array([0.0,0.0,0.0]) 
+        self.force = array([0.0,0.0,0.0]) 
         self.quad_start = None
         self.activated = True
 
     def reset_force(self):
-        self.force = np.array([0.0,0.0,0.0]) 
+        self.force = array([0.0,0.0,0.0]) 
 
     def stats(self):
         print("Msss: ",self.mass," ID: ",self.id)
@@ -93,7 +93,7 @@ class Quad:
 
 
     def get_correct_quad(self,pos):
-        dpos = np.array(pos - self.start,dtype=np.float32)
+        dpos = array(pos - self.start,dtype=float32)
         ddpos = dpos/(self.l/2.0)
 #        print("dividng: ",dpos,self.l/2.0,ddpos)
         try:
@@ -114,22 +114,22 @@ class Quad:
     def NW(self):
         s = self.l/2
         sx,sy = self.__get_sx_sy()
-        return Quad(np.array([sx,sy,0.0]),s)
+        return Quad(array([sx,sy,0.0]),s)
     
     def NE(self):
         s = self.l/2
         sx,sy = self.__get_sx_sy()
-        return  Quad(np.array([sx + s,sy,0.0]),s)
+        return  Quad(array([sx + s,sy,0.0]),s)
     
     def SW(self):
         s = self.l/2
         sx,sy = self.__get_sx_sy()
-        return Quad(np.array([sx ,sy + s,0.0]),s)
+        return Quad(array([sx ,sy + s,0.0]),s)
     
     def SE(self):
         s = self.l/2
         sx,sy = self.__get_sx_sy()
-        return Quad(np.array([sx + s,sy + s,0.0]),s)
+        return Quad(array([sx + s,sy + s,0.0]),s)
 
 
 class BarnesHut:
@@ -140,7 +140,17 @@ class BarnesHut:
         self.theta = theta
         self.count = 0
         pass
- 
+    
+    def get_all_childs(self):
+        subhuts = True
+        childs = []
+        for hut in self.subhuts:
+            if hut is not None :
+                childs.extend(hut.get_all_childs())
+                subhuts = False 
+        if subhuts: 
+            childs.append(self.body.id)
+        return childs
 
     def insert(self,b):
         """should not pass an copied object"""
@@ -172,6 +182,7 @@ class BarnesHut:
         i = int(i)
         if i != -1:
             Q = self.quad.get_quad(int(i))
+            print("next quad",self.quad.l,Q.l)
             if self.subhuts[i] is None:
                 self.subhuts[i] = BarnesHut(Q)
                 self.subhuts[i].count = 0 
@@ -183,11 +194,13 @@ class BarnesHut:
     def update_force(self,b,G): 
         if self.body.id!= -1 and b.id != self.body.id:
             b.force += compute_gravity_vector(b.pos,b.mass,self.body.pos,self.body.mass,G)
+            print(b.id,b.mass,self.get_all_childs(),self.body.mass, b.force)
             return
-        d = np.linalg.norm(self.body.pos-b.pos) 
+        d = norm(self.body.pos-b.pos) 
         if self.quad.l/d < self.theta:
             force = compute_gravity_vector(b.pos,b.mass,self.body.pos,self.body.mass,G)
             b.force += force
+            print(b.id,b.mass,self.get_all_childs() ,self.body.mass,force)
             return
         else:
             for hut in self.subhuts:

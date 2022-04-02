@@ -1,11 +1,11 @@
 initial_zooming_factor = 0.8
-N = 20
-first_mass = 1000
-angle_sides = 30 #
+N = 500
+first_mass = 100000000
+angle_sides = 35 #
 vel_angle = 90 
-particle_speed = 1
+particle_speed = 1000
 particles_mass = 10
-gal_radius = 200
+gal_radius = 15000
 
 
 #Barnes Algorithm parameters 
