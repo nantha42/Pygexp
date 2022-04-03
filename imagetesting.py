@@ -92,6 +92,8 @@ class Display:
         self.old_root = None
         self.show_quads = False
         self.enabled_galaxy_construction = False
+        self.hovering_planet = -1  
+
 
     def create_surfaces(self):
         r = int(max(min(4*self.zoom,64),64))
@@ -521,6 +523,9 @@ class Display:
         surf = self.font.render(f"{int(x)},{int(y)}",True,(255,255,255),(30,0,40))
         self.win.blit(surf,(mix+20,miy))
         self.win.blit(self.x_mark,(screen_width//2-8,screen_height//2-8),special_flags=py.BLEND_RGB_ADD)
+        if self.hovering_planet != -1:
+            surf = self.font.render(f"Planet Name: {self.planets_names[self.hovering_planet]}",True,(255,255,255),(30,0,40))
+            self.win.blit(surf,(0,60))
    
     def spawn_process(self):
         center = array([screen_width//2, screen_height//2,rdrandint(-10,10)],dtype=float32)
@@ -674,12 +679,29 @@ class Display:
 
     def recalculate_surfaces(self):
         self.create_surfaces()
+    
+    
+    def find_close(self):
+        x,y = py.mouse.get_pos()
+        p = self.screen_to_space([x,y])
+        i,min_dis,min_i = 0,1e9,-1
+        for planet in self.planets:
+            dis = norm(planet-p)
+            if min_dis > dis and dis < self.zoom*10:
+                min_dis = dis
+                min_i = i
+            i+=1
+        if min_i != -1:
+            self.hovering_planet = min_i
+        else:
+            self.hovering_planet = -1
 
     def run(self):
         while not self.done:
             self.eventhandler()
             self.calculate_origin(self.center - self.drag)
             self.draw()
+            self.find_close()
             py.display.update()
             if not self.pause and not self.launch_enabled:
                 if self.fast_compute:
@@ -696,6 +718,7 @@ class Display:
 
     def particles_sync(self):
         """Syncs the particles for different algorithms"""
+        pass
            
 
     def calculate_fps(self):
