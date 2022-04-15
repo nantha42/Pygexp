@@ -12,3 +12,8 @@ gal_radius = 15000
 theta = 0.5 
 quad_pos = [-5e3,-5e3,0] 
 quad_len = 1e4
+
+
+#UI
+font_name = "fonts/stencil_pixel-7.ttf"
+font_size = 15

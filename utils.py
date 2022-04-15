@@ -13,6 +13,16 @@ from math import atan2, radians
 from time import time, sleep
 print_enabled = True 
 
+
+def camera_view(vector, points):
+    """
+        the vector pointing direction is the camera angle and the point ends is 
+        where the camera capture screen and from that place frustrum starts. Its 
+        a triangular ratio. 
+    """
+    pass
+
+
 def printt(*args):
     if print_enabled:
         sti =""
@@ -26,6 +36,24 @@ def count_elements(x):
     for i in range(len(x.shape)):
        ans *= x.shape[i] 
     return ans 
+
+def generate_name():
+    alphabets = "abcedfghijklmnopqrstuvwxyz"
+    consonants = "bcdfghjklmnpqrstvwxyz"
+    vowels = "aeiou" 
+    l = randint(4,8) 
+    name = "" + alphabets[randint(0,26)] 
+    def isvowel(x):
+        if x in vowels:
+            return True
+        return False
+
+    for i in range(l):
+        if isvowel(name[-1]):
+            name += consonants[randint(0,21)] 
+        else:
+            name += vowels[randint(0,5)]
+    return name
 
 def ptrin(x):
     printt(x)
